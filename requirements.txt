@@ -1,0 +1,6 @@
+# Cloudflare Workers AI (cloudflare_image_gen.py)
+requests
+
+# Gemini (gemini_image_gen.py)
+google-genai
+Pillow
