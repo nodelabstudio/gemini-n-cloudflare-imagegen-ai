@@ -4,123 +4,134 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token }}" />
-  <title>Gallery - AI Image Generator</title>
+  <title>Gallery - Cloudfire Image Generator</title>
+  <link rel="icon" type="image/jpeg" href="/static/fire-logo.jpg" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       theme: {
         extend: {
-          colors: {
-            surface: { 50: '#f8fafb', 100: '#f0f4f5', 200: '#e2e8ea', 700: '#1e2a30', 800: '#151f24', 900: '#0d1519', 950: '#080e12' },
-            accent: { 400: '#5eead4', 500: '#2dd4bf', 600: '#14b8a6' },
-            gold: { 400: '#facc15', 500: '#eab308' },
-          },
-          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+          fontFamily: { heading: ['Space Grotesk', 'system-ui', 'sans-serif'], body: ['DM Sans', 'system-ui', 'sans-serif'] },
         }
       }
     }
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
   <style>
-    body { font-family: 'Inter', system-ui, sans-serif; }
-    .gradient-border {
-      background: linear-gradient(135deg, #2dd4bf22, #14b8a622, #facc1522);
-      padding: 1px;
-      border-radius: 1rem;
-    }
-    .gradient-border-inner {
-      background: #151f24;
-      border-radius: calc(1rem - 1px);
-    }
+    body { font-family: 'DM Sans', system-ui, sans-serif; }
+    :root { --bg: #FFFDF7; --bg-card: #fff; --bg-muted: #F5F5F0; --fg: #1a1a1a; --fg-muted: #555; --fg-dim: #888; --fg-faint: #AAA; --border: #000; --shadow: #000; }
+    .dark { --bg: #1a1a1a; --bg-card: #2a2a2a; --bg-muted: #333; --fg: #f0f0f0; --fg-muted: #ccc; --fg-dim: #999; --fg-faint: #777; --border: #f0f0f0; --shadow: #000; }
+    .nb-card { border: 3px solid var(--border); box-shadow: 5px 5px 0 var(--shadow); }
+    .nb-card-hover:hover { box-shadow: 3px 3px 0 var(--shadow); transform: translate(2px, 2px); }
+    .nb-btn { border: 3px solid #000; box-shadow: 4px 4px 0 #000; transition: all 0.1s ease; }
+    .nb-btn:hover { box-shadow: 2px 2px 0 #000; transform: translate(2px, 2px); }
+    .nb-btn:active { box-shadow: 0 0 0 #000; transform: translate(4px, 4px); }
+    .nb-badge { border: 2px solid #000; color: #1a1a1a; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+    #theme-toggle { cursor: pointer; transition: transform 0.3s ease; }
+    #theme-toggle:hover { transform: scale(1.15); }
   </style>
+  <script>
+    (function() {
+      const t = localStorage.getItem('theme');
+      if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
 </head>
-<body class="h-full bg-surface-950 text-surface-100">
+<body class="h-full bg-[var(--bg)] text-[var(--fg)]">
 
   <div class="min-h-full flex flex-col">
 
     <!-- Header -->
-    <header class="border-b border-surface-700/50 px-6 py-5">
-      <div class="max-w-6xl mx-auto flex items-center justify-between">
-        <div>
-          <h1 class="text-2xl font-bold tracking-tight">
-            <span class="text-accent-500">AI</span> Image Gallery
-          </h1>
-          <p class="text-sm text-surface-200/60 mt-0.5">All generated images</p>
-        </div>
-        <div class="flex items-center gap-4">
-          <a href="/" class="text-sm text-surface-200/50 hover:text-accent-400 transition">Generator</a>
-          <span class="text-xs text-surface-200/30">{{ images | length }} image{{ 's' if images | length != 1 }}</span>
-          <span class="text-surface-700">|</span>
-          <span class="text-sm text-surface-200/50">{{ username }}</span>
-          <a href="/logout" class="text-sm text-surface-200/30 hover:text-red-400 transition">Logout</a>
+    <header class="px-4 sm:px-6 py-3 sm:py-4 bg-[var(--bg-card)]" style="border-bottom: 3px solid var(--border);">
+      <div class="max-w-6xl mx-auto">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2 sm:gap-3">
+            <img src="/static/fire-logo.jpg" alt="Cloudfire" class="w-8 h-8 sm:w-10 sm:h-10 rounded-md" style="border: 2px solid var(--border);" />
+            <div>
+              <h1 class="font-heading text-xl sm:text-2xl font-bold tracking-tight">
+                <span class="text-[#FF6B35]">Cloud</span><span class="text-[#FFD166]">fire</span> <span class="hidden sm:inline">Gallery</span>
+              </h1>
+              <p class="text-[10px] sm:text-xs text-[var(--fg-dim)] font-medium -mt-0.5"><span class="sm:hidden">Gallery &middot; </span>{{ images | length }} image{{ 's' if images | length != 1 }}</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 sm:gap-3">
+            <svg id="theme-toggle" onclick="toggleTheme()" class="w-5 h-5 text-[var(--fg-dim)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <g id="icon-sun" class="hidden"><circle cx="12" cy="12" r="5" stroke-width="2"/><path stroke-width="2" stroke-linecap="round" d="M12 1v2m0 18v2m11-11h-2M3 12H1m16.36-7.36l-1.41 1.41M7.05 16.95l-1.41 1.41m12.72 0l-1.41-1.41M7.05 7.05L5.64 5.64"/></g>
+              <g id="icon-moon"><path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></g>
+            </svg>
+            <a href="/" class="nb-badge px-2 sm:px-3 py-1 rounded-md bg-[#FF6B35] text-white text-[8px] sm:text-[10px]">Generator</a>
+            <span class="nb-badge px-2 sm:px-3 py-1 rounded-md bg-[#FFD166] text-[8px] sm:text-[10px] hidden sm:inline-block">{{ username }}</span>
+            <a href="/logout" class="nb-badge px-2 sm:px-3 py-1 rounded-md bg-[#FFE0E0] hover:bg-[#FFCCCC] transition-colors text-[8px] sm:text-[10px]">Logout</a>
+          </div>
         </div>
       </div>
     </header>
 
     <!-- Main -->
-    <main class="flex-1 px-6 py-8">
+    <main class="flex-1 px-4 sm:px-6 py-6 sm:py-8">
       <div class="max-w-6xl mx-auto">
 
         {% if not images %}
         <!-- Empty state -->
         <div class="flex flex-col items-center justify-center py-24 text-center">
-          <div class="w-20 h-20 rounded-2xl bg-surface-700/30 flex items-center justify-center mb-5">
-            <svg class="w-10 h-10 text-surface-200/20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="w-24 h-24 rounded-md bg-[var(--bg-muted)] flex items-center justify-center mb-5" style="border: 3px solid var(--border);">
+            <svg class="w-12 h-12 text-[#CCC]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                 d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.41a2.25 2.25 0 013.182 0l2.909 2.91m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
             </svg>
           </div>
-          <p class="text-surface-200/40 text-lg font-medium mb-2">No images yet</p>
-          <p class="text-surface-200/25 text-sm mb-6">Generate your first image to see it here</p>
+          <p class="text-[var(--fg-muted)] text-lg font-bold mb-2">No images yet</p>
+          <p class="text-[var(--fg-faint)] text-sm mb-6">Generate your first image to see it here</p>
           <a href="/"
-            class="bg-gradient-to-r from-accent-600 to-accent-500 hover:from-accent-500 hover:to-accent-400 text-surface-950 font-semibold px-6 py-2.5 rounded-lg transition-all duration-200">
+            class="nb-btn bg-[#FF6B35] text-white font-bold px-6 py-2.5 rounded-md">
             Generate Image
           </a>
         </div>
         {% else %}
 
         <!-- Image grid -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
           {% for img in images %}
-          <div class="gradient-border group">
-            <div class="gradient-border-inner overflow-hidden">
-              <!-- Image -->
-              <div class="relative cursor-pointer" onclick="openModal('{{ img.id }}', '{{ img.prompt | e }}', '{{ img.provider }}', '{{ img.model_name }}', '{{ img.created_at.strftime('%b %d, %Y at %I:%M %p') }}')">
-                <img src="/image/{{ img.id }}" alt="Generated image" loading="lazy"
-                  class="w-full aspect-square object-cover group-hover:scale-105 transition-transform duration-300" />
-                <div class="absolute inset-0 bg-gradient-to-t from-surface-950/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                <div class="absolute bottom-0 left-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <p class="text-xs text-surface-100/90 line-clamp-2">{{ img.prompt[:120] }}</p>
+          <div class="nb-card nb-card-hover bg-[var(--bg-card)] rounded-md overflow-hidden transition-all duration-150 group">
+            <!-- Image -->
+            <div class="relative cursor-pointer" onclick="openModal('{{ img.id }}', '{{ img.prompt | e }}', '{{ img.provider }}', '{{ img.model_name }}', '{{ img.created_at.strftime('%b %d, %Y at %I:%M %p') }}')">
+              <img src="/image/{{ img.id }}" alt="Generated image" loading="lazy"
+                class="w-full aspect-square object-cover" />
+              <div class="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-200 flex items-end">
+                <div class="p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                  <p class="text-xs text-white font-medium line-clamp-2 drop-shadow-lg">{{ img.prompt[:120] }}</p>
                 </div>
               </div>
-              <!-- Meta -->
-              <div class="px-4 py-3 flex items-center justify-between">
-                <div class="flex items-center gap-2 min-w-0">
-                  {% if img.provider == 'cloudflare' %}
-                  <span class="shrink-0 inline-block w-2 h-2 rounded-full bg-orange-400"></span>
-                  {% else %}
-                  <span class="shrink-0 inline-block w-2 h-2 rounded-full bg-blue-400"></span>
-                  {% endif %}
-                  <span class="text-xs text-surface-200/50 truncate">{{ img.model_name }}</span>
-                </div>
-                <div class="flex items-center gap-2 shrink-0">
-                  <a href="/download/{{ img.id }}" title="Download"
-                    class="text-surface-200/30 hover:text-accent-400 transition">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  </a>
-                  <button onclick="event.stopPropagation(); deleteImage('{{ img.id }}', this)" title="Delete"
-                    class="text-surface-200/30 hover:text-red-400 transition">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                </div>
+            </div>
+            <!-- Meta -->
+            <div class="px-4 py-3 flex items-center justify-between" style="border-top: 2.5px solid var(--border);">
+              <div class="flex items-center gap-2 min-w-0">
+                {% if img.provider == 'cloudflare' %}
+                <span class="nb-badge px-1.5 py-0 rounded-sm bg-[#FF6B35] text-white" style="font-size: 8px;">CF</span>
+                {% else %}
+                <span class="nb-badge px-1.5 py-0 rounded-sm bg-[#4285F4] text-white" style="font-size: 8px;">G</span>
+                {% endif %}
+                <span class="text-xs text-[var(--fg-dim)] truncate font-medium">{{ img.model_name }}</span>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <a href="/download/{{ img.id }}" title="Download"
+                  class="w-7 h-7 flex items-center justify-center rounded-sm bg-[#BFFF00] hover:translate-x-[1px] hover:translate-y-[1px] transition-transform" style="border: 2px solid #000; box-shadow: 2px 2px 0 #000;">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                      d="M12 10v6m0 0l-3-3m3 3l3-3" />
+                  </svg>
+                </a>
+                <button onclick="event.stopPropagation(); deleteImage('{{ img.id }}', this)" title="Delete"
+                  class="w-7 h-7 flex items-center justify-center rounded-sm bg-[#FFE0E0] hover:bg-[#FFCCCC] hover:translate-x-[1px] hover:translate-y-[1px] transition-all" style="border: 2px solid #000; box-shadow: 2px 2px 0 #000;">
+                  <svg class="w-3.5 h-3.5 text-[#CC0000]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                      d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
             </div>
           </div>
@@ -132,11 +143,11 @@
     </main>
 
     <!-- Footer -->
-    <footer class="border-t border-surface-700/30 px-6 py-4">
-      <div class="max-w-6xl mx-auto flex items-center justify-between text-xs text-surface-200/30">
-        <span>Powered by Cloudflare Workers AI &amp; Google Gemini</span>
+    <footer class="px-4 sm:px-6 py-3 sm:py-4 bg-[var(--bg-card)]" style="border-top: 3px solid var(--border);">
+      <div class="max-w-6xl mx-auto flex items-center justify-between text-[10px] sm:text-xs text-[var(--fg-faint)] font-medium">
+        <span>Cloudfire Image Generator</span>
         <a href="https://github.com/nodelabstudio/gemini-n-cloudflare-imagegen-ai" target="_blank"
-          class="hover:text-surface-200/60 transition">GitHub</a>
+          class="hover:text-[#FF6B35] transition-colors">GitHub</a>
       </div>
     </footer>
 
@@ -144,36 +155,34 @@
 
   <!-- Lightbox Modal -->
   <div id="modal" class="fixed inset-0 z-50 hidden" onclick="closeModal(event)">
-    <div class="absolute inset-0 bg-surface-950/90 backdrop-blur-sm"></div>
-    <div class="relative h-full flex items-center justify-center p-6">
-      <div class="bg-surface-800 rounded-2xl overflow-hidden max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl" onclick="event.stopPropagation()">
+    <div class="absolute inset-0 bg-black/40"></div>
+    <div class="relative h-full flex items-center justify-center p-3 sm:p-6">
+      <div class="nb-card bg-[var(--bg-card)] rounded-md overflow-hidden max-w-4xl w-full max-h-[90vh] flex flex-col" onclick="event.stopPropagation()">
         <!-- Modal header -->
-        <div class="flex items-center justify-between px-5 py-3 border-b border-surface-700/50">
+        <div class="flex items-center justify-between px-5 py-3" style="border-bottom: 2.5px solid var(--border); background: var(--bg-muted);">
           <div class="flex items-center gap-3">
-            <span id="modal-provider" class="inline-block w-2 h-2 rounded-full"></span>
-            <span id="modal-model" class="text-sm text-surface-200/70"></span>
+            <span id="modal-provider" class="nb-badge px-1.5 py-0 rounded-sm text-white" style="font-size: 8px;"></span>
+            <span id="modal-model" class="text-sm text-[var(--fg-muted)] font-bold"></span>
           </div>
           <div class="flex items-center gap-3">
-            <span id="modal-date" class="text-xs text-surface-200/30"></span>
-            <button onclick="closeModal()" class="text-surface-200/40 hover:text-surface-100 transition">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+            <span id="modal-date" class="text-xs text-[var(--fg-faint)]"></span>
+            <button onclick="closeModal()" class="w-8 h-8 flex items-center justify-center rounded-md bg-white font-bold text-sm" style="border: 2px solid #000; box-shadow: 2px 2px 0 #000;">
+              X
             </button>
           </div>
         </div>
         <!-- Modal image -->
-        <div class="flex-1 overflow-auto bg-surface-900 flex items-center justify-center">
-          <img id="modal-image" src="" alt="Full size image" class="max-w-full max-h-[65vh] object-contain" />
+        <div class="flex-1 overflow-auto bg-[var(--bg-muted)] flex items-center justify-center p-2">
+          <img id="modal-image" src="" alt="Full size image" class="max-w-full max-h-[65vh] object-contain rounded-md" style="border: 2px solid var(--border);" />
         </div>
         <!-- Modal footer -->
-        <div class="px-5 py-3 border-t border-surface-700/50 space-y-2">
-          <p id="modal-prompt" class="text-sm text-surface-200/60 leading-relaxed"></p>
+        <div class="px-5 py-3 space-y-2" style="border-top: 2.5px solid var(--border);">
+          <p id="modal-prompt" class="text-sm text-[var(--fg-muted)] leading-relaxed"></p>
           <div class="flex gap-3">
             <a id="modal-download" href="#" download
-              class="flex-1 flex items-center justify-center gap-2 bg-accent-600 hover:bg-accent-500 text-surface-950 text-sm font-semibold py-2.5 rounded-lg transition">
+              class="nb-btn flex-1 flex items-center justify-center gap-2 bg-[#FF6B35] text-white font-bold py-2.5 rounded-md text-sm">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
                   d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
               Download
@@ -185,6 +194,19 @@
   </div>
 
   <script>
+    // Theme toggle
+    function toggleTheme() {
+      const isDark = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+      updateThemeIcon();
+    }
+    function updateThemeIcon() {
+      const isDark = document.documentElement.classList.contains('dark');
+      document.getElementById('icon-sun').classList.toggle('hidden', !isDark);
+      document.getElementById('icon-moon').classList.toggle('hidden', isDark);
+    }
+    updateThemeIcon();
+
     function openModal(id, prompt, provider, model, date) {
       document.getElementById("modal-image").src = `/image/${id}`;
       document.getElementById("modal-prompt").textContent = prompt;
@@ -192,7 +214,15 @@
       document.getElementById("modal-date").textContent = date;
       document.getElementById("modal-download").href = `/download/${id}`;
       const dot = document.getElementById("modal-provider");
-      dot.className = `inline-block w-2 h-2 rounded-full ${provider === 'cloudflare' ? 'bg-orange-400' : 'bg-blue-400'}`;
+      if (provider === 'cloudflare') {
+        dot.className = "nb-badge px-1.5 py-0 rounded-sm bg-[#FF6B35] text-white";
+        dot.style.fontSize = "8px";
+        dot.textContent = "CF";
+      } else {
+        dot.className = "nb-badge px-1.5 py-0 rounded-sm bg-[#4285F4] text-white";
+        dot.style.fontSize = "8px";
+        dot.textContent = "G";
+      }
       document.getElementById("modal").classList.remove("hidden");
       document.body.style.overflow = "hidden";
     }
@@ -215,10 +245,10 @@
         headers: { "X-CSRF-Token": csrfToken },
       });
       if (res.ok) {
-        const card = btn.closest(".gradient-border");
+        const card = btn.closest(".nb-card");
         card.style.transition = "opacity 0.3s, transform 0.3s";
         card.style.opacity = "0";
-        card.style.transform = "scale(0.95)";
+        card.style.transform = "scale(0.95) translate(2px, 2px)";
         setTimeout(() => card.remove(), 300);
       }
     }

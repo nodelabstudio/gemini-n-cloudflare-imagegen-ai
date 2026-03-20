@@ -4,215 +4,304 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token }}" />
-  <title>AI Image Generator</title>
+  <title>Cloudfire Image Generator</title>
+  <link rel="icon" type="image/jpeg" href="/static/fire-logo.jpg" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       theme: {
         extend: {
-          colors: {
-            surface: { 50: '#f8fafb', 100: '#f0f4f5', 200: '#e2e8ea', 700: '#1e2a30', 800: '#151f24', 900: '#0d1519', 950: '#080e12' },
-            accent: { 400: '#5eead4', 500: '#2dd4bf', 600: '#14b8a6' },
-            gold: { 400: '#facc15', 500: '#eab308' },
-          },
-          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+          fontFamily: { heading: ['Space Grotesk', 'system-ui', 'sans-serif'], body: ['DM Sans', 'system-ui', 'sans-serif'] },
         }
       }
     }
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
   <style>
-    body { font-family: 'Inter', system-ui, sans-serif; }
-    .gradient-border {
-      background: linear-gradient(135deg, #2dd4bf22, #14b8a622, #facc1522);
-      padding: 1px;
-      border-radius: 1rem;
+    body { font-family: 'DM Sans', system-ui, sans-serif; }
+    :root { --bg: #FFFDF7; --bg-card: #fff; --bg-muted: #F5F5F0; --fg: #1a1a1a; --fg-muted: #555; --fg-dim: #888; --fg-faint: #AAA; --fg-placeholder: #CCC; --border: #000; --shadow: #000; }
+    .dark { --bg: #1a1a1a; --bg-card: #2a2a2a; --bg-muted: #333; --fg: #f0f0f0; --fg-muted: #ccc; --fg-dim: #999; --fg-faint: #777; --fg-placeholder: #555; --border: #f0f0f0; --shadow: #000; }
+    .nb-card { border: 3px solid var(--border); box-shadow: 5px 5px 0 var(--shadow); }
+    .nb-btn { border: 3px solid #000; box-shadow: 4px 4px 0 #000; transition: all 0.1s ease; }
+    .nb-btn:hover { box-shadow: 2px 2px 0 #000; transform: translate(2px, 2px); }
+    .nb-btn:active { box-shadow: 0 0 0 #000; transform: translate(4px, 4px); }
+    .nb-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; box-shadow: 4px 4px 0 #000 !important; }
+    .nb-input { border: 2.5px solid #000; color: #1a1a1a; background: #fff; }
+    .nb-input:focus { outline: none; box-shadow: 3px 3px 0 #FF6B35; }
+    .nb-input::placeholder { color: #AAA; }
+    .nb-select { border: 2.5px solid #000; color: #1a1a1a; background: #fff; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8L1 3h10z' fill='%23000'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
+    .nb-select:focus { outline: none; box-shadow: 3px 3px 0 #FF6B35; }
+    .nb-badge { border: 2px solid #000; color: #1a1a1a; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+    @keyframes nb-bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
     }
-    .gradient-border-inner {
-      background: #151f24;
-      border-radius: calc(1rem - 1px);
-    }
-    @keyframes shimmer {
-      0% { background-position: -200% 0; }
-      100% { background-position: 200% 0; }
-    }
-    .loading-shimmer {
-      background: linear-gradient(90deg, #1e2a30 25%, #2a3a42 50%, #1e2a30 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.5s infinite;
-    }
-    @keyframes pulse-ring {
-      0% { transform: scale(0.8); opacity: 1; }
-      100% { transform: scale(2.2); opacity: 0; }
-    }
-    .pulse-dot::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      border-radius: 50%;
-      background: #2dd4bf;
-      animation: pulse-ring 1.2s ease-out infinite;
-    }
-    textarea::-webkit-scrollbar { width: 6px; }
-    textarea::-webkit-scrollbar-track { background: transparent; }
-    textarea::-webkit-scrollbar-thumb { background: #2a3a42; border-radius: 3px; }
-    select option { background: #151f24; color: #f0f4f5; }
+    .nb-loading { animation: nb-bounce 0.6s ease-in-out infinite; }
+    .nb-loading:nth-child(2) { animation-delay: 0.1s; }
+    .nb-loading:nth-child(3) { animation-delay: 0.2s; }
+    #theme-toggle { cursor: pointer; transition: transform 0.3s ease; }
+    #theme-toggle:hover { transform: scale(1.15); }
   </style>
+  <script>
+    (function() {
+      const t = localStorage.getItem('theme');
+      if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
 </head>
-<body class="h-full bg-surface-950 text-surface-100">
+<body class="h-full bg-[var(--bg)] text-[var(--fg)]">
 
   <div class="min-h-full flex flex-col">
 
     <!-- Header -->
-    <header class="border-b border-surface-700/50 px-6 py-5">
-      <div class="max-w-5xl mx-auto flex items-center justify-between">
-        <div>
-          <h1 class="text-2xl font-bold tracking-tight">
-            <span class="text-accent-500">AI</span> Image Generator
-          </h1>
-          <p class="text-sm text-surface-200/60 mt-0.5">Gemini &amp; Cloudflare Workers AI</p>
-        </div>
-        <div class="flex items-center gap-4">
-          <a href="/gallery" class="text-sm text-surface-200/50 hover:text-accent-400 transition">Gallery</a>
-          <span class="text-surface-700">|</span>
-          <span class="text-sm text-surface-200/50">{{ username }}</span>
-          <a href="/logout" class="text-sm text-surface-200/30 hover:text-red-400 transition">Logout</a>
+    <header class="px-4 sm:px-6 py-3 sm:py-4 bg-[var(--bg-card)]" style="border-bottom: 3px solid var(--border);">
+      <div class="max-w-5xl mx-auto">
+        <!-- Top row: logo + icons -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2 sm:gap-3">
+            <img src="/static/fire-logo.jpg" alt="Cloudfire" class="w-8 h-8 sm:w-10 sm:h-10 rounded-md" style="border: 2px solid var(--border);" />
+            <div>
+              <h1 class="font-heading text-xl sm:text-2xl font-bold tracking-tight">
+                <span class="text-[#FF6B35]">Cloud</span><span class="text-[#FFD166]">fire</span>
+              </h1>
+              <p class="text-[10px] sm:text-xs text-[var(--fg-dim)] font-medium -mt-0.5">Image Generator</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 sm:gap-3">
+            <svg id="theme-toggle" onclick="toggleTheme()" class="w-5 h-5 text-[var(--fg-dim)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <g id="icon-sun" class="hidden"><circle cx="12" cy="12" r="5" stroke-width="2"/><path stroke-width="2" stroke-linecap="round" d="M12 1v2m0 18v2m11-11h-2M3 12H1m16.36-7.36l-1.41 1.41M7.05 16.95l-1.41 1.41m12.72 0l-1.41-1.41M7.05 7.05L5.64 5.64"/></g>
+              <g id="icon-moon"><path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></g>
+            </svg>
+            <button onclick="toggleInfo()" title="About this app"
+              class="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-md bg-[#7DF9FF] nb-badge text-sm sm:text-base" style="box-shadow: 2px 2px 0 #000;">
+              ?
+            </button>
+            <a href="/gallery" class="nb-badge px-2 sm:px-3 py-1 rounded-md bg-[#BFFF00] text-[8px] sm:text-[10px]">Gallery</a>
+            <span class="nb-badge px-2 sm:px-3 py-1 rounded-md bg-[#FFD166] text-[8px] sm:text-[10px] hidden sm:inline-block">{{ username }}</span>
+            <a href="/logout" class="nb-badge px-2 sm:px-3 py-1 rounded-md bg-[#FFE0E0] hover:bg-[#FFCCCC] transition-colors text-[8px] sm:text-[10px]">Logout</a>
+          </div>
         </div>
       </div>
     </header>
 
     <!-- Main -->
-    <main class="flex-1 px-6 py-8">
-      <div class="max-w-5xl mx-auto grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-8">
+    <main class="flex-1 px-4 sm:px-6 py-6 sm:py-8">
+      <div class="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-6 sm:gap-8">
 
         <!-- Left: Controls -->
         <div class="space-y-6">
 
           <!-- Provider + Model -->
-          <div class="gradient-border">
-            <div class="gradient-border-inner p-5 space-y-4">
-              <h2 class="text-sm font-semibold text-surface-200/80 uppercase tracking-wider">Model</h2>
+          <div class="nb-card bg-[var(--bg-card)] rounded-md p-5 space-y-4">
+            <h2 class="font-heading text-sm font-bold uppercase tracking-wider bg-[#FFD166] text-[#1a1a1a] inline-block px-2 py-0.5 rounded-sm" style="border: 2px solid var(--border);">Model</h2>
 
-              <!-- Provider -->
-              <div>
-                <label for="provider" class="block text-xs text-surface-200/50 mb-1.5">Provider</label>
-                <select id="provider"
-                  class="w-full bg-surface-900 border border-surface-700/60 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:border-accent-500/60 transition">
-                  <option value="cloudflare">Cloudflare Workers AI</option>
-                  <option value="gemini">Google Gemini</option>
-                </select>
-              </div>
+            <div>
+              <label for="provider" class="block text-sm font-bold mb-1.5">Provider</label>
+              <select id="provider"
+                class="nb-select w-full bg-white rounded-md px-3 py-2.5 text-sm pr-8">
+                <option value="cloudflare">Cloudflare Workers AI</option>
+                <option value="gemini" {% if not is_admin %}disabled{% endif %}>Google Gemini{% if not is_admin %} (Admins Only){% endif %}</option>
+              </select>
+            </div>
 
-              <!-- Model -->
-              <div>
-                <label for="model" class="block text-xs text-surface-200/50 mb-1.5">Model</label>
-                <select id="model"
-                  class="w-full bg-surface-900 border border-surface-700/60 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:border-accent-500/60 transition">
-                </select>
-              </div>
+            <div>
+              <label for="model" class="block text-sm font-bold mb-1.5">Model</label>
+              <select id="model"
+                class="nb-select w-full bg-white rounded-md px-3 py-2.5 text-sm pr-8">
+              </select>
+            </div>
 
-              <!-- Model badge -->
-              <div id="model-badge" class="hidden">
-                <span id="tier-badge" class="inline-block text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full"></span>
-              </div>
+            <div id="model-badge" class="hidden">
+              <span id="tier-badge" class="nb-badge inline-block px-2 py-0.5 rounded-sm"></span>
             </div>
           </div>
 
           <!-- Prompt -->
-          <div class="gradient-border">
-            <div class="gradient-border-inner p-5 space-y-4">
-              <h2 class="text-sm font-semibold text-surface-200/80 uppercase tracking-wider">Prompt</h2>
-              <textarea id="prompt" rows="6" placeholder="Describe the image you want to generate..."
-                class="w-full bg-surface-900 border border-surface-700/60 rounded-lg px-3 py-2.5 text-sm leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:border-accent-500/60 transition placeholder:text-surface-200/25"></textarea>
+          <div class="nb-card bg-[var(--bg-card)] rounded-md p-5 space-y-4">
+            <h2 class="font-heading text-sm font-bold uppercase tracking-wider bg-[#FF6B35] text-white inline-block px-2 py-0.5 rounded-sm" style="border: 2px solid var(--border);">Prompt</h2>
+            <textarea id="prompt" rows="6" placeholder="Describe the image you want to generate..."
+              class="nb-input w-full bg-white rounded-md px-3 py-2.5 text-sm leading-relaxed resize-none"></textarea>
 
-              <!-- Generate button -->
-              <button id="generate-btn" onclick="generateImage()"
-                class="w-full bg-gradient-to-r from-accent-600 to-accent-500 hover:from-accent-500 hover:to-accent-400 text-surface-950 font-semibold py-3 rounded-lg transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">
-                Generate Image
+            <button id="generate-btn" onclick="generateImage()"
+              class="nb-btn w-full bg-[#FF6B35] text-white font-bold py-3 rounded-md text-base">
+              Generate Image
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Right: Output -->
+        <div class="nb-card bg-[var(--bg-card)] rounded-md p-5 h-fit lg:sticky lg:top-8">
+
+          <!-- Empty state -->
+          <div id="empty-state" class="flex flex-col items-center justify-center py-20 text-center">
+            <div class="w-20 h-20 rounded-md bg-[var(--bg-muted)] flex items-center justify-center mb-4" style="border: 2.5px solid var(--border);">
+              <svg class="w-10 h-10 text-[#CCC]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                  d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.41a2.25 2.25 0 013.182 0l2.909 2.91m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+              </svg>
+            </div>
+            <p class="text-[var(--fg-faint)] text-sm font-medium">Your generated image will appear here</p>
+          </div>
+
+          <!-- Loading state -->
+          <div id="loading-state" class="hidden flex-col items-center justify-center py-20 text-center">
+            <div class="flex gap-2 mb-5">
+              <div class="w-5 h-5 bg-[#FF6B35] rounded-sm nb-loading" style="border: 2px solid var(--border);"></div>
+              <div class="w-5 h-5 bg-[#FFD166] rounded-sm nb-loading" style="border: 2px solid var(--border);"></div>
+              <div class="w-5 h-5 bg-[#BFFF00] rounded-sm nb-loading" style="border: 2px solid var(--border);"></div>
+            </div>
+            <p class="text-[var(--fg-muted)] text-sm font-bold">Generating your image...</p>
+            <p class="text-[var(--fg-faint)] text-xs mt-1">This may take 10-30 seconds</p>
+          </div>
+
+          <!-- Error state -->
+          <div id="error-state" class="hidden flex-col items-center justify-center py-16 text-center px-6">
+            <div class="w-16 h-16 rounded-md bg-[#FFE0E0] flex items-center justify-center mb-4" style="border: 2.5px solid var(--border);">
+              <span class="text-2xl font-bold text-[#CC0000]">!</span>
+            </div>
+            <p class="text-[#CC0000] text-sm font-bold mb-1">Generation failed</p>
+            <p id="error-msg" class="text-[var(--fg-dim)] text-xs leading-relaxed"></p>
+          </div>
+
+          <!-- Result state -->
+          <div id="result-state" class="hidden space-y-4">
+            <div class="rounded-md overflow-hidden" style="border: 2.5px solid var(--border);">
+              <img id="result-image" src="" alt="Generated image" class="w-full h-auto" />
+            </div>
+            <div class="flex gap-3">
+              <a id="download-btn" href="#" download
+                class="nb-btn flex-1 flex items-center justify-center gap-2 bg-[#BFFF00] text-[#1a1a1a] font-bold py-2.5 rounded-md text-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Download PNG
+              </a>
+              <button onclick="resetUI()"
+                class="nb-btn px-5 bg-[#F5F5F0] text-[#1a1a1a] font-bold py-2.5 rounded-md text-sm">
+                New
               </button>
             </div>
           </div>
 
         </div>
 
-        <!-- Right: Output -->
-        <div class="gradient-border h-fit lg:sticky lg:top-8">
-          <div class="gradient-border-inner p-5">
-
-            <!-- Empty state -->
-            <div id="empty-state" class="flex flex-col items-center justify-center py-20 text-center">
-              <div class="w-16 h-16 rounded-2xl bg-surface-700/30 flex items-center justify-center mb-4">
-                <svg class="w-8 h-8 text-surface-200/20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                    d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.41a2.25 2.25 0 013.182 0l2.909 2.91m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-                </svg>
-              </div>
-              <p class="text-surface-200/30 text-sm">Your generated image will appear here</p>
-            </div>
-
-            <!-- Loading state -->
-            <div id="loading-state" class="hidden flex-col items-center justify-center py-20 text-center">
-              <div class="relative w-12 h-12 mb-5">
-                <div class="absolute inset-0 rounded-full bg-accent-500/20 pulse-dot"></div>
-                <div class="absolute inset-2 rounded-full bg-accent-500/60"></div>
-              </div>
-              <p class="text-surface-200/60 text-sm font-medium">Generating your image...</p>
-              <p class="text-surface-200/30 text-xs mt-1">This may take 10-30 seconds</p>
-            </div>
-
-            <!-- Error state -->
-            <div id="error-state" class="hidden flex-col items-center justify-center py-16 text-center px-6">
-              <div class="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center mb-4">
-                <svg class="w-7 h-7 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                    d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-                </svg>
-              </div>
-              <p class="text-red-400 text-sm font-medium mb-1">Generation failed</p>
-              <p id="error-msg" class="text-surface-200/40 text-xs leading-relaxed"></p>
-            </div>
-
-            <!-- Result state -->
-            <div id="result-state" class="hidden space-y-4">
-              <div class="rounded-lg overflow-hidden bg-surface-900">
-                <img id="result-image" src="" alt="Generated image" class="w-full h-auto" />
-              </div>
-              <div class="flex gap-3">
-                <a id="download-btn" href="#" download
-                  class="flex-1 flex items-center justify-center gap-2 bg-surface-700/50 hover:bg-surface-700/80 border border-surface-700/60 text-sm font-medium py-2.5 rounded-lg transition">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Download PNG
-                </a>
-                <button onclick="resetUI()"
-                  class="px-4 bg-surface-700/50 hover:bg-surface-700/80 border border-surface-700/60 text-sm font-medium py-2.5 rounded-lg transition">
-                  New
-                </button>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
       </div>
     </main>
 
     <!-- Footer -->
-    <footer class="border-t border-surface-700/30 px-6 py-4">
-      <div class="max-w-5xl mx-auto flex items-center justify-between text-xs text-surface-200/30">
-        <span>Powered by Cloudflare Workers AI &amp; Google Gemini</span>
+    <footer class="px-4 sm:px-6 py-3 sm:py-4 bg-[var(--bg-card)]" style="border-top: 3px solid var(--border);">
+      <div class="max-w-5xl mx-auto flex items-center justify-between text-[10px] sm:text-xs text-[var(--fg-faint)] font-medium">
+        <span>Cloudfire Image Generator</span>
         <a href="https://github.com/nodelabstudio/gemini-n-cloudflare-imagegen-ai" target="_blank"
-          class="hover:text-surface-200/60 transition">GitHub</a>
+          class="hover:text-[#FF6B35] transition-colors">GitHub</a>
       </div>
     </footer>
 
   </div>
 
+  <!-- Info Modal (drops from top) -->
+  <div id="info-backdrop" class="fixed inset-0 z-50 hidden" onclick="toggleInfo()">
+    <div class="absolute inset-0 bg-black/40"></div>
+  </div>
+  <div id="info-panel"
+    class="fixed top-0 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1rem)] sm:w-full max-w-lg
+           transition-transform duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]
+           -translate-y-full"
+    onclick="event.stopPropagation()">
+    <div class="m-4 mt-6 nb-card bg-[var(--bg-card)] rounded-md overflow-hidden">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4" style="border-bottom: 2.5px solid var(--border); background: #FFD166;">
+        <div class="flex items-center gap-3">
+          <img src="/static/fire-logo.jpg" alt="Cloudfire" class="w-8 h-8 rounded-md" style="border: 2px solid #000;" />
+          <h2 class="font-heading text-lg font-bold text-[#1a1a1a]">
+            <span class="text-[#FF6B35]">Cloud</span>fire
+          </h2>
+        </div>
+        <button onclick="toggleInfo()" class="w-8 h-8 flex items-center justify-center rounded-md bg-white text-[#1a1a1a] font-bold text-sm" style="border: 2px solid #000; box-shadow: 2px 2px 0 #000;">
+          X
+        </button>
+      </div>
+      <!-- Body -->
+      <div class="px-6 py-5 space-y-4 text-sm text-[var(--fg-muted)] leading-relaxed">
+        <p>
+          <strong class="text-[#1a1a1a] font-bold">What is this?</strong><br>
+          Cloudfire is a tool that creates pictures from words. You type a description of what you want to see,
+          pick an AI model, and the app generates an image for you. It's like having an artist that draws
+          whatever you describe!
+        </p>
+        <p>
+          <strong class="text-[#1a1a1a] font-bold">How does it work?</strong><br>
+          Your description gets sent to an AI service (either Cloudflare or Google Gemini). The AI has been
+          trained on millions of images, so it knows how to turn words into pictures. It takes about 10-30
+          seconds to create each image.
+        </p>
+        <p>
+          <strong class="text-[#1a1a1a] font-bold">What are the limits?</strong>
+        </p>
+        <ul class="list-none space-y-1.5 text-[#555]">
+          <li class="flex items-start gap-2"><span class="inline-block w-2 h-2 mt-1.5 bg-[#FF6B35] rounded-sm shrink-0" style="border: 1.5px solid #000;"></span> You can generate up to <strong>5 images per minute</strong></li>
+          <li class="flex items-start gap-2"><span class="inline-block w-2 h-2 mt-1.5 bg-[#FFD166] rounded-sm shrink-0" style="border: 1.5px solid #000;"></span> Very detailed descriptions of people may get blocked by safety filters</li>
+          <li class="flex items-start gap-2"><span class="inline-block w-2 h-2 mt-1.5 bg-[#BFFF00] rounded-sm shrink-0" style="border: 1.5px solid #000;"></span> The AI can't perfectly control text inside images</li>
+          <li class="flex items-start gap-2"><span class="inline-block w-2 h-2 mt-1.5 bg-[#7DF9FF] rounded-sm shrink-0" style="border: 1.5px solid #000;"></span> Results vary between models &mdash; try different ones!</li>
+          <li class="flex items-start gap-2"><span class="inline-block w-2 h-2 mt-1.5 bg-[#FF69B4] rounded-sm shrink-0" style="border: 1.5px solid #000;"></span> Images are saved to your gallery so you can download them anytime</li>
+        </ul>
+        <p>
+          <strong class="text-[#1a1a1a] font-bold">Which model should I use?</strong><br>
+          Start with <span class="font-bold text-[#FF6B35]">FLUX.1 Schnell</span> (free, great quality). If you want
+          the best results and don't mind paying, try <span class="font-bold text-[#FF6B35]">FLUX.2 Dev</span>.
+          For Google-powered generation, try <span class="font-bold text-[#FF6B35]">Gemini 2.5 Flash</span>.
+        </p>
+      </div>
+    </div>
+  </div>
+
   <script>
+    function toggleInfo() {
+      const panel = document.getElementById("info-panel");
+      const backdrop = document.getElementById("info-backdrop");
+      const isOpen = !panel.classList.contains("-translate-y-full");
+
+      if (isOpen) {
+        panel.classList.add("-translate-y-full");
+        backdrop.classList.add("hidden");
+        document.body.style.overflow = "";
+      } else {
+        backdrop.classList.remove("hidden");
+        void panel.offsetHeight;
+        panel.classList.remove("-translate-y-full");
+        document.body.style.overflow = "hidden";
+      }
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        const panel = document.getElementById("info-panel");
+        if (!panel.classList.contains("-translate-y-full")) toggleInfo();
+      }
+    });
+
+    // Theme toggle
+    function toggleTheme() {
+      const html = document.documentElement;
+      const isDark = html.classList.toggle('dark');
+      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+      updateThemeIcon();
+    }
+    function updateThemeIcon() {
+      const isDark = document.documentElement.classList.contains('dark');
+      document.getElementById('icon-sun').classList.toggle('hidden', !isDark);
+      document.getElementById('icon-moon').classList.toggle('hidden', isDark);
+    }
+    updateThemeIcon();
+
+    const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
+
     const MODELS = {
       cloudflare: {
         free: [
@@ -271,6 +360,10 @@
           const opt = document.createElement("option");
           opt.value = m.key;
           opt.textContent = `${m.name} \u2014 ${m.desc}`;
+          if (!IS_ADMIN) {
+            opt.disabled = true;
+            opt.textContent += ' (Admins Only)';
+          }
           modelEl.appendChild(opt);
         });
       }
@@ -283,16 +376,16 @@
 
       if (provider === "gemini") {
         tierBadge.textContent = "API Key Required";
-        tierBadge.className = "inline-block text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full bg-gold-500/15 text-gold-400";
+        tierBadge.className = "nb-badge inline-block px-2 py-0.5 rounded-sm bg-[#FFD166]";
         modelBadge.classList.remove("hidden");
       } else {
         const isPaid = MODELS.cloudflare.paid.some(m => m.key === key);
         if (isPaid) {
           tierBadge.textContent = "Paid";
-          tierBadge.className = "inline-block text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full bg-gold-500/15 text-gold-400";
+          tierBadge.className = "nb-badge inline-block px-2 py-0.5 rounded-sm bg-[#FF69B4] text-white";
         } else {
           tierBadge.textContent = "Free";
-          tierBadge.className = "inline-block text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full bg-accent-500/15 text-accent-400";
+          tierBadge.className = "nb-badge inline-block px-2 py-0.5 rounded-sm bg-[#BFFF00]";
         }
         modelBadge.classList.remove("hidden");
       }

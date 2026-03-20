@@ -1,11 +1,13 @@
 import os
 import base64
 import uuid
+import contextvars
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, Depends
 from fastapi.responses import HTMLResponse, Response, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 from starlette.middleware.sessions import SessionMiddleware
@@ -21,16 +23,25 @@ from auth import hash_password, verify_password, get_csrf_token, validate_csrf_t
 load_dotenv()
 
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "dev-only-change-me-in-production")
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "")
+
+_is_admin_request = contextvars.ContextVar("_is_admin_request", default=False)
+
+
+def _check_admin_exempt() -> bool:
+    return _is_admin_request.get(False)
 
 
 def get_user_key(request: Request) -> str:
+    """Return a rate-limit key. Admins get a separate key prefix so they can have different limits."""
     return request.session.get("user_id", request.client.host)
 
 
-app = FastAPI(title="AI Image Generator")
+app = FastAPI(title="Cloudfire Image Generator")
 limiter = Limiter(key_func=get_user_key)
 app.state.limiter = limiter
 templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 CLOUDFLARE_MODELS = {
     "flux-schnell": {"id": "@cf/black-forest-labs/flux-1-schnell", "name": "FLUX.1 Schnell", "tier": "free"},
@@ -62,10 +73,13 @@ PUBLIC_PATHS = {"/login", "/register"}
 async def security_middleware(request: Request, call_next):
     path = request.url.path
 
-    # Auth gate
-    if path not in PUBLIC_PATHS:
+    # Auth gate (skip static files and public pages)
+    if path not in PUBLIC_PATHS and not path.startswith("/static"):
         if not request.session.get("user_id"):
             return RedirectResponse("/login", status_code=302)
+
+    # Set admin context for rate limiter exemption
+    _is_admin_request.set(request.session.get("is_admin", False))
 
     response = await call_next(request)
 
@@ -148,6 +162,7 @@ def login(
 
     request.session["user_id"] = user.id
     request.session["username"] = user.username
+    request.session["is_admin"] = user.is_admin
     return RedirectResponse("/", status_code=302)
 
 
@@ -194,16 +209,20 @@ def register(
         ctx["error"] = "Username already taken."
         return templates.TemplateResponse("register.html", ctx)
 
+    is_admin = bool(ADMIN_USERNAME and username == ADMIN_USERNAME)
+
     user = User(
         id=uuid.uuid4().hex,
         username=username,
         password_hash=hash_password(password),
+        is_admin=is_admin,
     )
     db.add(user)
     db.commit()
 
     request.session["user_id"] = user.id
     request.session["username"] = user.username
+    request.session["is_admin"] = user.is_admin
     return RedirectResponse("/", status_code=302)
 
 
@@ -221,6 +240,7 @@ def index(request: Request):
         "request": request,
         "username": request.session.get("username", ""),
         "csrf_token": get_csrf_token(request),
+        "is_admin": request.session.get("is_admin", False),
     })
 
 
@@ -243,7 +263,7 @@ def gallery(request: Request, db: Session = Depends(get_db)):
 # --------------- API routes ---------------
 
 @app.post("/generate")
-@limiter.limit("5/minute")
+@limiter.limit("5/minute", exempt_when=_check_admin_exempt)
 def generate(
     request: Request,
     prompt: str = Form(...),
@@ -256,6 +276,9 @@ def generate(
         return JSONResponse({"error": "Invalid CSRF token"}, status_code=403)
 
     try:
+        if provider == "gemini" and not request.session.get("is_admin"):
+            return JSONResponse({"error": "Gemini models are restricted to admins only."}, status_code=403)
+
         if provider == "cloudflare":
             image_data = generate_cloudflare(prompt, model_key)
         elif provider == "gemini":

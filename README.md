@@ -1,6 +1,8 @@
-# AI Image Generator
+# Cloudfire Image Generator
 
 A web UI and CLI for generating images with **Cloudflare Workers AI** and **Google Gemini**. Built with FastAPI, styled with Tailwind CSS, and deployable to Railway in one click.
+
+<p align="center"><img src="fire-logo.jpg" width="120" alt="Cloudfire logo" /></p>
 
 ![Python](https://img.shields.io/badge/python-3.10+-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-teal) ![License](https://img.shields.io/badge/license-MIT-green)
 

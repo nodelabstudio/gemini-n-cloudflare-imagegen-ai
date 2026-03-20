@@ -2,7 +2,8 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./images.db")
+_default_db = "sqlite:///" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "images.db")
+DATABASE_URL = os.environ.get("DATABASE_URL", _default_db)
 
 # Railway gives postgres:// but SQLAlchemy 2.x requires postgresql://
 if DATABASE_URL.startswith("postgres://"):

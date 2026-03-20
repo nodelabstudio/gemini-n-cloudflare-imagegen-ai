@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, String, Text, LargeBinary, DateTime
+from sqlalchemy import Boolean, Column, String, Text, LargeBinary, DateTime
 
 from database import Base
 
@@ -12,6 +12,7 @@ class User(Base):
     id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
     username = Column(String(100), unique=True, nullable=False, index=True)
     password_hash = Column(String(200), nullable=False)
+    is_admin = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
