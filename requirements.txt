@@ -1,6 +1,22 @@
-# Cloudflare Workers AI (cloudflare_image_gen.py)
+# Web UI
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+python-dotenv
+itsdangerous
+
+# Auth & Security
+bcrypt
+slowapi
+
+# Database
+sqlalchemy
+psycopg2-binary
+
+# Cloudflare Workers AI
 requests
 
-# Gemini (gemini_image_gen.py)
+# Gemini
 google-genai
 Pillow

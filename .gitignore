@@ -5,6 +5,9 @@
 # Generated images
 output/
 
+# Local SQLite DB
+*.db
+
 # Python
 __pycache__/
 *.pyc

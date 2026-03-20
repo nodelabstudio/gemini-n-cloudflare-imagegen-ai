@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="csrf-token" content="{{ csrf_token }}" />
+  <title>AI Image Generator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            surface: { 50: '#f8fafb', 100: '#f0f4f5', 200: '#e2e8ea', 700: '#1e2a30', 800: '#151f24', 900: '#0d1519', 950: '#080e12' },
+            accent: { 400: '#5eead4', 500: '#2dd4bf', 600: '#14b8a6' },
+            gold: { 400: '#facc15', 500: '#eab308' },
+          },
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .gradient-border {
+      background: linear-gradient(135deg, #2dd4bf22, #14b8a622, #facc1522);
+      padding: 1px;
+      border-radius: 1rem;
+    }
+    .gradient-border-inner {
+      background: #151f24;
+      border-radius: calc(1rem - 1px);
+    }
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .loading-shimmer {
+      background: linear-gradient(90deg, #1e2a30 25%, #2a3a42 50%, #1e2a30 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.8); opacity: 1; }
+      100% { transform: scale(2.2); opacity: 0; }
+    }
+    .pulse-dot::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: #2dd4bf;
+      animation: pulse-ring 1.2s ease-out infinite;
+    }
+    textarea::-webkit-scrollbar { width: 6px; }
+    textarea::-webkit-scrollbar-track { background: transparent; }
+    textarea::-webkit-scrollbar-thumb { background: #2a3a42; border-radius: 3px; }
+    select option { background: #151f24; color: #f0f4f5; }
+  </style>
+</head>
+<body class="h-full bg-surface-950 text-surface-100">
+
+  <div class="min-h-full flex flex-col">
+
+    <!-- Header -->
+    <header class="border-b border-surface-700/50 px-6 py-5">
+      <div class="max-w-5xl mx-auto flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-bold tracking-tight">
+            <span class="text-accent-500">AI</span> Image Generator
+          </h1>
+          <p class="text-sm text-surface-200/60 mt-0.5">Gemini &amp; Cloudflare Workers AI</p>
+        </div>
+        <div class="flex items-center gap-4">
+          <a href="/gallery" class="text-sm text-surface-200/50 hover:text-accent-400 transition">Gallery</a>
+          <span class="text-surface-700">|</span>
+          <span class="text-sm text-surface-200/50">{{ username }}</span>
+          <a href="/logout" class="text-sm text-surface-200/30 hover:text-red-400 transition">Logout</a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main -->
+    <main class="flex-1 px-6 py-8">
+      <div class="max-w-5xl mx-auto grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-8">
+
+        <!-- Left: Controls -->
+        <div class="space-y-6">
+
+          <!-- Provider + Model -->
+          <div class="gradient-border">
+            <div class="gradient-border-inner p-5 space-y-4">
+              <h2 class="text-sm font-semibold text-surface-200/80 uppercase tracking-wider">Model</h2>
+
+              <!-- Provider -->
+              <div>
+                <label for="provider" class="block text-xs text-surface-200/50 mb-1.5">Provider</label>
+                <select id="provider"
+                  class="w-full bg-surface-900 border border-surface-700/60 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:border-accent-500/60 transition">
+                  <option value="cloudflare">Cloudflare Workers AI</option>
+                  <option value="gemini">Google Gemini</option>
+                </select>
+              </div>
+
+              <!-- Model -->
+              <div>
+                <label for="model" class="block text-xs text-surface-200/50 mb-1.5">Model</label>
+                <select id="model"
+                  class="w-full bg-surface-900 border border-surface-700/60 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:border-accent-500/60 transition">
+                </select>
+              </div>
+
+              <!-- Model badge -->
+              <div id="model-badge" class="hidden">
+                <span id="tier-badge" class="inline-block text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Prompt -->
+          <div class="gradient-border">
+            <div class="gradient-border-inner p-5 space-y-4">
+              <h2 class="text-sm font-semibold text-surface-200/80 uppercase tracking-wider">Prompt</h2>
+              <textarea id="prompt" rows="6" placeholder="Describe the image you want to generate..."
+                class="w-full bg-surface-900 border border-surface-700/60 rounded-lg px-3 py-2.5 text-sm leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-accent-500/40 focus:border-accent-500/60 transition placeholder:text-surface-200/25"></textarea>
+
+              <!-- Generate button -->
+              <button id="generate-btn" onclick="generateImage()"
+                class="w-full bg-gradient-to-r from-accent-600 to-accent-500 hover:from-accent-500 hover:to-accent-400 text-surface-950 font-semibold py-3 rounded-lg transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">
+                Generate Image
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right: Output -->
+        <div class="gradient-border h-fit lg:sticky lg:top-8">
+          <div class="gradient-border-inner p-5">
+
+            <!-- Empty state -->
+            <div id="empty-state" class="flex flex-col items-center justify-center py-20 text-center">
+              <div class="w-16 h-16 rounded-2xl bg-surface-700/30 flex items-center justify-center mb-4">
+                <svg class="w-8 h-8 text-surface-200/20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                    d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.41a2.25 2.25 0 013.182 0l2.909 2.91m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                </svg>
+              </div>
+              <p class="text-surface-200/30 text-sm">Your generated image will appear here</p>
+            </div>
+
+            <!-- Loading state -->
+            <div id="loading-state" class="hidden flex-col items-center justify-center py-20 text-center">
+              <div class="relative w-12 h-12 mb-5">
+                <div class="absolute inset-0 rounded-full bg-accent-500/20 pulse-dot"></div>
+                <div class="absolute inset-2 rounded-full bg-accent-500/60"></div>
+              </div>
+              <p class="text-surface-200/60 text-sm font-medium">Generating your image...</p>
+              <p class="text-surface-200/30 text-xs mt-1">This may take 10-30 seconds</p>
+            </div>
+
+            <!-- Error state -->
+            <div id="error-state" class="hidden flex-col items-center justify-center py-16 text-center px-6">
+              <div class="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center mb-4">
+                <svg class="w-7 h-7 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                    d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                </svg>
+              </div>
+              <p class="text-red-400 text-sm font-medium mb-1">Generation failed</p>
+              <p id="error-msg" class="text-surface-200/40 text-xs leading-relaxed"></p>
+            </div>
+
+            <!-- Result state -->
+            <div id="result-state" class="hidden space-y-4">
+              <div class="rounded-lg overflow-hidden bg-surface-900">
+                <img id="result-image" src="" alt="Generated image" class="w-full h-auto" />
+              </div>
+              <div class="flex gap-3">
+                <a id="download-btn" href="#" download
+                  class="flex-1 flex items-center justify-center gap-2 bg-surface-700/50 hover:bg-surface-700/80 border border-surface-700/60 text-sm font-medium py-2.5 rounded-lg transition">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Download PNG
+                </a>
+                <button onclick="resetUI()"
+                  class="px-4 bg-surface-700/50 hover:bg-surface-700/80 border border-surface-700/60 text-sm font-medium py-2.5 rounded-lg transition">
+                  New
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-surface-700/30 px-6 py-4">
+      <div class="max-w-5xl mx-auto flex items-center justify-between text-xs text-surface-200/30">
+        <span>Powered by Cloudflare Workers AI &amp; Google Gemini</span>
+        <a href="https://github.com/nodelabstudio/gemini-n-cloudflare-imagegen-ai" target="_blank"
+          class="hover:text-surface-200/60 transition">GitHub</a>
+      </div>
+    </footer>
+
+  </div>
+
+  <script>
+    const MODELS = {
+      cloudflare: {
+        free: [
+          { key: "flux-schnell", name: "FLUX.1 Schnell", desc: "Best free option, 12B params" },
+          { key: "sdxl", name: "Stable Diffusion XL", desc: "Stability AI baseline" },
+          { key: "dreamshaper", name: "DreamShaper 8 LCM", desc: "Photorealistic fine-tune" },
+          { key: "sd-lightning", name: "SDXL Lightning", desc: "Ultra-fast, 2-step" },
+          { key: "sd-img2img", name: "SD v1.5 Img2Img", desc: "Transform existing images" },
+          { key: "sd-inpaint", name: "SD v1.5 Inpainting", desc: "Mask-based editing" },
+        ],
+        paid: [
+          { key: "flux-2-dev", name: "FLUX.2 Dev", desc: "Best quality, up to 4MP" },
+          { key: "flux-2-klein-4b", name: "FLUX.2 Klein 4B", desc: "Fast + affordable" },
+          { key: "flux-2-klein-9b", name: "FLUX.2 Klein 9B", desc: "Enhanced quality" },
+          { key: "phoenix", name: "Leonardo Phoenix", desc: "Great text rendering" },
+          { key: "lucid", name: "Leonardo Lucid Origin", desc: "Versatile styles" },
+        ]
+      },
+      gemini: [
+        { key: "gemini-2.5-flash", name: "Gemini 2.5 Flash", desc: "Fast image generation" },
+        { key: "gemini-3.1-flash", name: "Gemini 3.1 Flash", desc: "Preview model" },
+      ]
+    };
+
+    const providerEl = document.getElementById("provider");
+    const modelEl = document.getElementById("model");
+    const modelBadge = document.getElementById("model-badge");
+    const tierBadge = document.getElementById("tier-badge");
+
+    function updateModels() {
+      const provider = providerEl.value;
+      modelEl.innerHTML = "";
+
+      if (provider === "cloudflare") {
+        const freeGroup = document.createElement("optgroup");
+        freeGroup.label = "Free";
+        MODELS.cloudflare.free.forEach(m => {
+          const opt = document.createElement("option");
+          opt.value = m.key;
+          opt.textContent = `${m.name} \u2014 ${m.desc}`;
+          freeGroup.appendChild(opt);
+        });
+        modelEl.appendChild(freeGroup);
+
+        const paidGroup = document.createElement("optgroup");
+        paidGroup.label = "Paid";
+        MODELS.cloudflare.paid.forEach(m => {
+          const opt = document.createElement("option");
+          opt.value = m.key;
+          opt.textContent = `${m.name} \u2014 ${m.desc}`;
+          paidGroup.appendChild(opt);
+        });
+        modelEl.appendChild(paidGroup);
+      } else {
+        MODELS.gemini.forEach(m => {
+          const opt = document.createElement("option");
+          opt.value = m.key;
+          opt.textContent = `${m.name} \u2014 ${m.desc}`;
+          modelEl.appendChild(opt);
+        });
+      }
+      updateBadge();
+    }
+
+    function updateBadge() {
+      const provider = providerEl.value;
+      const key = modelEl.value;
+
+      if (provider === "gemini") {
+        tierBadge.textContent = "API Key Required";
+        tierBadge.className = "inline-block text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full bg-gold-500/15 text-gold-400";
+        modelBadge.classList.remove("hidden");
+      } else {
+        const isPaid = MODELS.cloudflare.paid.some(m => m.key === key);
+        if (isPaid) {
+          tierBadge.textContent = "Paid";
+          tierBadge.className = "inline-block text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full bg-gold-500/15 text-gold-400";
+        } else {
+          tierBadge.textContent = "Free";
+          tierBadge.className = "inline-block text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full bg-accent-500/15 text-accent-400";
+        }
+        modelBadge.classList.remove("hidden");
+      }
+    }
+
+    providerEl.addEventListener("change", updateModels);
+    modelEl.addEventListener("change", updateBadge);
+    updateModels();
+
+    function showState(state) {
+      ["empty-state", "loading-state", "error-state", "result-state"].forEach(id => {
+        const el = document.getElementById(id);
+        el.classList.add("hidden");
+        el.classList.remove("flex");
+      });
+      const active = document.getElementById(state + "-state");
+      if (state === "loading" || state === "error" || state === "empty") {
+        active.classList.remove("hidden");
+        active.classList.add("flex");
+      } else {
+        active.classList.remove("hidden");
+      }
+    }
+
+    function resetUI() {
+      showState("empty");
+      document.getElementById("generate-btn").disabled = false;
+    }
+
+    async function generateImage() {
+      const prompt = document.getElementById("prompt").value.trim();
+      if (!prompt) return;
+
+      const btn = document.getElementById("generate-btn");
+      btn.disabled = true;
+      showState("loading");
+
+      const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+      const formData = new FormData();
+      formData.append("prompt", prompt);
+      formData.append("provider", providerEl.value);
+      formData.append("model_key", modelEl.value);
+      formData.append("csrf_token", csrfToken);
+
+      try {
+        const res = await fetch("/generate", { method: "POST", body: formData });
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+          document.getElementById("error-msg").textContent = data.error || "Unknown error";
+          showState("error");
+          btn.disabled = false;
+          return;
+        }
+
+        const img = document.getElementById("result-image");
+        img.src = data.image_url;
+        document.getElementById("download-btn").href = `/download/${data.image_id}`;
+        showState("result");
+        btn.disabled = false;
+
+      } catch (err) {
+        document.getElementById("error-msg").textContent = err.message;
+        showState("error");
+        btn.disabled = false;
+      }
+    }
+
+    // Allow Ctrl+Enter to generate
+    document.getElementById("prompt").addEventListener("keydown", (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        generateImage();
+      }
+    });
+  </script>
+
+</body>
+</html>
