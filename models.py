@@ -11,8 +11,20 @@ class User(Base):
 
     id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
     username = Column(String(100), unique=True, nullable=False, index=True)
+    email = Column(String(200), nullable=True)
     password_hash = Column(String(200), nullable=False)
     is_admin = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    user_id = Column(String, nullable=False, index=True)
+    token = Column(String(64), unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    used = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 

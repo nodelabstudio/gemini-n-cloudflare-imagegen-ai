@@ -20,8 +20,9 @@ import requests as http_requests
 
 from database import init_db, get_db, engine
 from migrations import apply_migrations
-from models import GeneratedImage, ImageTag, User
+from models import GeneratedImage, ImageTag, User, PasswordResetToken
 from auth import hash_password, verify_password, get_csrf_token, validate_csrf_token
+from email_utils import send_password_reset_email, is_email_configured
 
 load_dotenv()
 
@@ -66,7 +67,7 @@ GEMINI_MODELS = {
 
 ALL_MODELS = {**CLOUDFLARE_MODELS, **GEMINI_MODELS}
 
-PUBLIC_PATHS = {"/login", "/register"}
+PUBLIC_PATHS = {"/login", "/register", "/forgot-password"}
 
 
 # --------------- Middleware ---------------
@@ -75,8 +76,8 @@ PUBLIC_PATHS = {"/login", "/register"}
 async def security_middleware(request: Request, call_next):
     path = request.url.path
 
-    # Auth gate (skip static files, public pages, and share links)
-    if path not in PUBLIC_PATHS and not path.startswith("/static") and not path.startswith("/s/"):
+    # Auth gate (skip static files, public pages, share links, and password reset)
+    if path not in PUBLIC_PATHS and not path.startswith("/static") and not path.startswith("/s/") and not path.startswith("/reset-password"):
         if not request.session.get("user_id"):
             return RedirectResponse("/login", status_code=302)
 
@@ -181,6 +182,7 @@ def register_page(request: Request):
 def register(
     request: Request,
     username: str = Form(...),
+    email: str = Form(""),
     password: str = Form(...),
     confirm_password: str = Form(...),
     csrf_token: str = Form(""),
@@ -214,6 +216,7 @@ def register(
     user = User(
         id=uuid.uuid4().hex,
         username=username,
+        email=email.strip() or None,
         password_hash=hash_password(password),
         is_admin=is_admin,
     )
@@ -229,6 +232,148 @@ def register(
 @app.get("/logout")
 def logout(request: Request):
     request.session.clear()
+    return RedirectResponse("/login", status_code=302)
+
+
+# --------------- Forgot / Reset Password ---------------
+
+@app.get("/forgot-password", response_class=HTMLResponse)
+def forgot_password_page(request: Request):
+    if request.session.get("user_id"):
+        return RedirectResponse("/", status_code=302)
+    return templates.TemplateResponse("forgot_password.html", {
+        "request": request,
+        "csrf_token": get_csrf_token(request),
+        "error": None,
+        "success": None,
+    })
+
+
+@app.post("/forgot-password", response_class=HTMLResponse)
+def forgot_password(
+    request: Request,
+    email: str = Form(...),
+    csrf_token: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    ctx = {"request": request, "csrf_token": get_csrf_token(request), "error": None, "success": None}
+
+    if not validate_csrf_token(request, csrf_token):
+        ctx["error"] = "Invalid request. Please try again."
+        return templates.TemplateResponse("forgot_password.html", ctx)
+
+    # Always show success to prevent email enumeration
+    ctx["success"] = "If an account with that email exists, a password reset link has been sent."
+
+    email = email.strip().lower()
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        return templates.TemplateResponse("forgot_password.html", ctx)
+
+    # Invalidate any existing tokens for this user
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used == False,
+    ).update({"used": True})
+
+    # Create new token (valid for 1 hour)
+    token = secrets.token_urlsafe(32)
+    reset_token = PasswordResetToken(
+        id=uuid.uuid4().hex,
+        user_id=user.id,
+        token=token,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    db.add(reset_token)
+    db.commit()
+
+    # Build reset URL
+    scheme = "https" if os.environ.get("RAILWAY_ENVIRONMENT") else request.url.scheme
+    host = request.url.hostname
+    port = request.url.port
+    if port and port not in (80, 443):
+        reset_url = f"{scheme}://{host}:{port}/reset-password/{token}"
+    else:
+        reset_url = f"{scheme}://{host}/reset-password/{token}"
+
+    sent = send_password_reset_email(user.email, reset_url)
+    if not sent:
+        import logging
+        logging.getLogger(__name__).info("Password reset link for %s: %s", email, reset_url)
+
+    return templates.TemplateResponse("forgot_password.html", ctx)
+
+
+@app.get("/reset-password/{token}", response_class=HTMLResponse)
+def reset_password_page(token: str, request: Request, db: Session = Depends(get_db)):
+    reset_token = db.query(PasswordResetToken).filter(
+        PasswordResetToken.token == token,
+        PasswordResetToken.used == False,
+        PasswordResetToken.expires_at > datetime.now(timezone.utc),
+    ).first()
+
+    if not reset_token:
+        return templates.TemplateResponse("forgot_password.html", {
+            "request": request,
+            "csrf_token": get_csrf_token(request),
+            "error": "This reset link is invalid or has expired. Please request a new one.",
+            "success": None,
+        })
+
+    return templates.TemplateResponse("reset_password.html", {
+        "request": request,
+        "csrf_token": get_csrf_token(request),
+        "token": token,
+        "error": None,
+    })
+
+
+@app.post("/reset-password/{token}", response_class=HTMLResponse)
+def reset_password(
+    token: str,
+    request: Request,
+    password: str = Form(...),
+    confirm_password: str = Form(...),
+    csrf_token: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    ctx = {"request": request, "csrf_token": get_csrf_token(request), "token": token}
+
+    if not validate_csrf_token(request, csrf_token):
+        ctx["error"] = "Invalid request. Please try again."
+        return templates.TemplateResponse("reset_password.html", ctx)
+
+    reset_token = db.query(PasswordResetToken).filter(
+        PasswordResetToken.token == token,
+        PasswordResetToken.used == False,
+        PasswordResetToken.expires_at > datetime.now(timezone.utc),
+    ).first()
+
+    if not reset_token:
+        return templates.TemplateResponse("forgot_password.html", {
+            "request": request,
+            "csrf_token": get_csrf_token(request),
+            "error": "This reset link is invalid or has expired. Please request a new one.",
+            "success": None,
+        })
+
+    if len(password) < 8:
+        ctx["error"] = "Password must be at least 8 characters."
+        return templates.TemplateResponse("reset_password.html", ctx)
+
+    if password != confirm_password:
+        ctx["error"] = "Passwords do not match."
+        return templates.TemplateResponse("reset_password.html", ctx)
+
+    user = db.query(User).filter(User.id == reset_token.user_id).first()
+    if not user:
+        ctx["error"] = "User not found."
+        return templates.TemplateResponse("reset_password.html", ctx)
+
+    user.password_hash = hash_password(password)
+    reset_token.used = True
+    db.commit()
+
     return RedirectResponse("/login", status_code=302)
 
 
