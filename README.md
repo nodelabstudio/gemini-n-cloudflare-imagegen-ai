@@ -20,6 +20,7 @@ A web UI and CLI for generating images with **Cloudflare Workers AI** and **Goog
 - CLI scripts for quick one-off generation
 - Black image / content filter detection
 - PostgreSQL-backed image storage with SQLite fallback for local dev
+- Self-service forgot password flow with email reset links
 - User authentication (bcrypt-hashed passwords, session cookies)
 - Admin roles (Gemini restricted, rate limit exempt)
 - CSRF protection on all mutations
@@ -64,8 +65,23 @@ Open [http://localhost:8000](http://localhost:8000) in your browser.
    - `CF_ACCOUNT_ID`, `CF_API_TOKEN` (Cloudflare)
    - `GEMINI_API_KEY` (Google, optional)
    - `SESSION_SECRET` (generate with `python3 -c "import secrets; print(secrets.token_hex(32))"`)
+   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `FROM_EMAIL` (for password reset emails — see below)
 
 6. Railway auto-detects the `Procfile` and deploys
+
+### Email (Password Reset)
+
+Password reset emails are sent via SMTP. We use [Resend](https://resend.com) (free tier: 100 emails/day).
+
+1. Sign up at [resend.com](https://resend.com) and verify your sending domain
+2. Add these variables in Railway:
+   - `SMTP_HOST=smtp.resend.com`
+   - `SMTP_PORT=587`
+   - `SMTP_USER=resend`
+   - `SMTP_PASS=re_your_api_key`
+   - `FROM_EMAIL=noreply@yourdomain.com`
+
+Without SMTP configured, the app still works — reset links are logged to the server console instead of emailed.
 
 The database table is created automatically on first startup. Locally it uses SQLite (`images.db`) so you don't need PostgreSQL for development.
 
@@ -125,6 +141,7 @@ python3 gemini_image_gen.py --diagnose
 ## Security
 
 - **Authentication:** Username/password with bcrypt-hashed passwords stored in PostgreSQL
+- **Password Reset:** Self-service forgot password via email (SMTP through [Resend](https://resend.com))
 - **Sessions:** Signed cookies (7-day expiry, SameSite=Lax, Secure flag in production)
 - **CSRF:** Token-based protection on all POST/DELETE endpoints
 - **Rate Limiting:** 5 image generations per minute per user (slowapi/limits)
@@ -142,6 +159,7 @@ python3 gemini_image_gen.py --diagnose
 - **Backend:** FastAPI + Uvicorn
 - **Frontend:** Tailwind CSS (CDN)
 - **Auth:** passlib + bcrypt, Starlette sessions
+- **Email:** Resend (SMTP)
 - **Database:** PostgreSQL (Railway) / SQLite (local dev)
 - **Providers:** Cloudflare Workers AI, Google Gemini
 - **Deployment:** Railway
