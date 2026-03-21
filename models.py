@@ -26,4 +26,16 @@ class GeneratedImage(Base):
     model_name = Column(String(200), nullable=False, default="")
     image_data = Column(LargeBinary, nullable=False)
     user_id = Column(String, nullable=True)
+    is_favorite = Column(Boolean, default=False, nullable=False)
+    share_token = Column(String(32), unique=True, nullable=True, index=True)
+    is_public = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class ImageTag(Base):
+    __tablename__ = "image_tags"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    image_id = Column(String, nullable=False, index=True)
+    tag = Column(String(100), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

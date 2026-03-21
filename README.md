@@ -9,12 +9,19 @@ A web UI and CLI for generating images with **Cloudflare Workers AI** and **Goog
 ## Features
 
 - Web UI with model selection, prompt input, image preview, and download
-- 11 Cloudflare models (6 free, 5 paid) + 2 Gemini models
+- 11 Cloudflare models (6 free, 5 paid) + 2 Gemini models (admin-only)
+- Model comparison mode (test same prompt across 2-4 models side by side)
+- Prompt history with reusable recent prompts
+- Gallery with favorites, tags, and filtering
+- Shareable public links for individual images
+- Usage dashboard with daily stats and model usage breakdown
+- Toast notifications for all actions
+- Neobrutalist UI with dark/light mode toggle
 - CLI scripts for quick one-off generation
 - Black image / content filter detection
-- PostgreSQL-backed image gallery with lightbox viewer and delete
-- SQLite fallback for local development (zero config)
+- PostgreSQL-backed image storage with SQLite fallback for local dev
 - User authentication (bcrypt-hashed passwords, session cookies)
+- Admin roles (Gemini restricted, rate limit exempt)
 - CSRF protection on all mutations
 - Rate limiting (5 image generations per minute per user)
 - Security headers (CSP, HSTS, X-Frame-Options, etc.)
@@ -139,6 +146,3 @@ python3 gemini_image_gen.py --diagnose
 - **Providers:** Cloudflare Workers AI, Google Gemini
 - **Deployment:** Railway
 
-## TODO
-
-- [ ] Neobrutalist UI redesign

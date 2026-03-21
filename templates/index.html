@@ -43,6 +43,7 @@
     .nb-loading:nth-child(3) { animation-delay: 0.2s; }
     #theme-toggle { cursor: pointer; transition: transform 0.3s ease; }
     #theme-toggle:hover { transform: scale(1.15); }
+    .compare-check { accent-color: #FF6B35; }
   </style>
   <script>
     (function() {
@@ -60,7 +61,6 @@
     <!-- Header -->
     <header class="px-4 sm:px-6 py-3 sm:py-4 bg-[var(--bg-card)]" style="border-bottom: 3px solid var(--border);">
       <div class="max-w-5xl mx-auto">
-        <!-- Top row: logo + icons -->
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2 sm:gap-3">
             <img src="/static/fire-logo.jpg" alt="Cloudfire" class="w-8 h-8 sm:w-10 sm:h-10 rounded-md" style="border: 2px solid var(--border);" />
@@ -81,6 +81,7 @@
               ?
             </button>
             <a href="/gallery" class="nb-badge px-2 sm:px-3 py-1 rounded-md bg-[#BFFF00] text-[8px] sm:text-[10px]">Gallery</a>
+            <a href="/dashboard" class="nb-badge px-2 sm:px-3 py-1 rounded-md bg-[#7DF9FF] text-[8px] sm:text-[10px]">Stats</a>
             <span class="nb-badge px-2 sm:px-3 py-1 rounded-md bg-[#FFD166] text-[8px] sm:text-[10px] hidden sm:inline-block">{{ username }}</span>
             <a href="/logout" class="nb-badge px-2 sm:px-3 py-1 rounded-md bg-[#FFE0E0] hover:bg-[#FFCCCC] transition-colors text-[8px] sm:text-[10px]">Logout</a>
           </div>
@@ -102,7 +103,7 @@
             <div>
               <label for="provider" class="block text-sm font-bold mb-1.5">Provider</label>
               <select id="provider"
-                class="nb-select w-full bg-white rounded-md px-3 py-2.5 text-sm pr-8">
+                class="nb-select w-full rounded-md px-3 py-2.5 text-sm pr-8">
                 <option value="cloudflare">Cloudflare Workers AI</option>
                 <option value="gemini" {% if not is_admin %}disabled{% endif %}>Google Gemini{% if not is_admin %} (Admins Only){% endif %}</option>
               </select>
@@ -111,22 +112,45 @@
             <div>
               <label for="model" class="block text-sm font-bold mb-1.5">Model</label>
               <select id="model"
-                class="nb-select w-full bg-white rounded-md px-3 py-2.5 text-sm pr-8">
+                class="nb-select w-full rounded-md px-3 py-2.5 text-sm pr-8">
               </select>
             </div>
 
             <div id="model-badge" class="hidden">
               <span id="tier-badge" class="nb-badge inline-block px-2 py-0.5 rounded-sm"></span>
             </div>
+
+            <!-- Compare toggle -->
+            <label class="flex items-center gap-2 cursor-pointer text-sm">
+              <input type="checkbox" id="compare-toggle" class="compare-check w-4 h-4" onchange="toggleCompareMode()" />
+              <span class="font-bold text-[var(--fg-muted)]">Compare models</span>
+            </label>
+
+            <!-- Compare model checklist (hidden by default) -->
+            <div id="compare-models" class="hidden space-y-1.5 pl-1">
+              <p class="text-xs text-[var(--fg-dim)]">Select 2-4 models:</p>
+              <div id="compare-checklist"></div>
+            </div>
           </div>
 
           <!-- Prompt -->
           <div class="nb-card bg-[var(--bg-card)] rounded-md p-5 space-y-4">
-            <h2 class="font-heading text-sm font-bold uppercase tracking-wider bg-[#FF6B35] text-white inline-block px-2 py-0.5 rounded-sm" style="border: 2px solid var(--border);">Prompt</h2>
-            <textarea id="prompt" rows="6" placeholder="Describe the image you want to generate..."
-              class="nb-input w-full bg-white rounded-md px-3 py-2.5 text-sm leading-relaxed resize-none"></textarea>
+            <div class="flex items-center justify-between">
+              <h2 class="font-heading text-sm font-bold uppercase tracking-wider bg-[#FF6B35] text-white inline-block px-2 py-0.5 rounded-sm" style="border: 2px solid var(--border);">Prompt</h2>
+              <button onclick="toggleHistory()" id="history-btn" class="text-xs font-bold text-[var(--fg-dim)] hover:text-[#FF6B35] transition-colors hidden">
+                Recent
+              </button>
+            </div>
 
-            <button id="generate-btn" onclick="generateImage()"
+            <!-- Prompt history dropdown -->
+            <div id="prompt-history" class="hidden max-h-32 overflow-y-auto rounded-md" style="border: 2px solid #000; background: #fff;">
+              <div id="history-list" class="divide-y divide-[#eee]"></div>
+            </div>
+
+            <textarea id="prompt" rows="6" placeholder="Describe the image you want to generate..."
+              class="nb-input w-full rounded-md px-3 py-2.5 text-sm leading-relaxed resize-none"></textarea>
+
+            <button id="generate-btn" onclick="handleGenerate()"
               class="nb-btn w-full bg-[#FF6B35] text-white font-bold py-3 rounded-md text-base">
               Generate Image
             </button>
@@ -140,7 +164,7 @@
           <!-- Empty state -->
           <div id="empty-state" class="flex flex-col items-center justify-center py-20 text-center">
             <div class="w-20 h-20 rounded-md bg-[var(--bg-muted)] flex items-center justify-center mb-4" style="border: 2.5px solid var(--border);">
-              <svg class="w-10 h-10 text-[#CCC]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-10 h-10 text-[var(--fg-placeholder)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                   d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.41a2.25 2.25 0 013.182 0l2.909 2.91m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
               </svg>
@@ -155,20 +179,11 @@
               <div class="w-5 h-5 bg-[#FFD166] rounded-sm nb-loading" style="border: 2px solid var(--border);"></div>
               <div class="w-5 h-5 bg-[#BFFF00] rounded-sm nb-loading" style="border: 2px solid var(--border);"></div>
             </div>
-            <p class="text-[var(--fg-muted)] text-sm font-bold">Generating your image...</p>
+            <p class="text-[var(--fg-muted)] text-sm font-bold" id="loading-text">Generating your image...</p>
             <p class="text-[var(--fg-faint)] text-xs mt-1">This may take 10-30 seconds</p>
           </div>
 
-          <!-- Error state -->
-          <div id="error-state" class="hidden flex-col items-center justify-center py-16 text-center px-6">
-            <div class="w-16 h-16 rounded-md bg-[#FFE0E0] flex items-center justify-center mb-4" style="border: 2.5px solid var(--border);">
-              <span class="text-2xl font-bold text-[#CC0000]">!</span>
-            </div>
-            <p class="text-[#CC0000] text-sm font-bold mb-1">Generation failed</p>
-            <p id="error-msg" class="text-[var(--fg-dim)] text-xs leading-relaxed"></p>
-          </div>
-
-          <!-- Result state -->
+          <!-- Result state (single image) -->
           <div id="result-state" class="hidden space-y-4">
             <div class="rounded-md overflow-hidden" style="border: 2.5px solid var(--border);">
               <img id="result-image" src="" alt="Generated image" class="w-full h-auto" />
@@ -187,6 +202,15 @@
                 New
               </button>
             </div>
+          </div>
+
+          <!-- Comparison result state -->
+          <div id="compare-state" class="hidden space-y-4">
+            <div id="compare-grid" class="grid grid-cols-2 gap-3"></div>
+            <button onclick="resetUI()"
+              class="nb-btn w-full bg-[#F5F5F0] text-[#1a1a1a] font-bold py-2.5 rounded-md text-sm">
+              New Comparison
+            </button>
           </div>
 
         </div>
@@ -214,9 +238,9 @@
            transition-transform duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]
            -translate-y-full"
     onclick="event.stopPropagation()">
-    <div class="m-4 mt-6 nb-card bg-[var(--bg-card)] rounded-md overflow-hidden">
+    <div class="m-2 sm:m-4 mt-4 sm:mt-6 nb-card bg-[var(--bg-card)] rounded-md overflow-hidden max-h-[85vh] flex flex-col">
       <!-- Header -->
-      <div class="flex items-center justify-between px-6 py-4" style="border-bottom: 2.5px solid var(--border); background: #FFD166;">
+      <div class="flex items-center justify-between px-5 py-3 shrink-0" style="border-bottom: 2.5px solid #000; background: #FFD166;">
         <div class="flex items-center gap-3">
           <img src="/static/fire-logo.jpg" alt="Cloudfire" class="w-8 h-8 rounded-md" style="border: 2px solid #000;" />
           <h2 class="font-heading text-lg font-bold text-[#1a1a1a]">
@@ -227,32 +251,40 @@
           X
         </button>
       </div>
-      <!-- Body -->
-      <div class="px-6 py-5 space-y-4 text-sm text-[var(--fg-muted)] leading-relaxed">
+      <!-- Scrollable body -->
+      <div class="px-5 py-5 space-y-4 text-sm text-[var(--fg-muted)] leading-relaxed overflow-y-auto">
         <p>
-          <strong class="text-[#1a1a1a] font-bold">What is this?</strong><br>
+          <strong class="text-[var(--fg)] font-bold">What is this?</strong><br>
           Cloudfire is a tool that creates pictures from words. You type a description of what you want to see,
           pick an AI model, and the app generates an image for you. It's like having an artist that draws
           whatever you describe!
         </p>
         <p>
-          <strong class="text-[#1a1a1a] font-bold">How does it work?</strong><br>
+          <strong class="text-[var(--fg)] font-bold">How does it work?</strong><br>
           Your description gets sent to an AI service (either Cloudflare or Google Gemini). The AI has been
           trained on millions of images, so it knows how to turn words into pictures. It takes about 10-30
           seconds to create each image.
         </p>
-        <p>
-          <strong class="text-[#1a1a1a] font-bold">What are the limits?</strong>
-        </p>
-        <ul class="list-none space-y-1.5 text-[#555]">
+        <p><strong class="text-[var(--fg)] font-bold">What are the limits?</strong></p>
+        <ul class="list-none space-y-1.5">
           <li class="flex items-start gap-2"><span class="inline-block w-2 h-2 mt-1.5 bg-[#FF6B35] rounded-sm shrink-0" style="border: 1.5px solid #000;"></span> You can generate up to <strong>5 images per minute</strong></li>
           <li class="flex items-start gap-2"><span class="inline-block w-2 h-2 mt-1.5 bg-[#FFD166] rounded-sm shrink-0" style="border: 1.5px solid #000;"></span> Very detailed descriptions of people may get blocked by safety filters</li>
           <li class="flex items-start gap-2"><span class="inline-block w-2 h-2 mt-1.5 bg-[#BFFF00] rounded-sm shrink-0" style="border: 1.5px solid #000;"></span> The AI can't perfectly control text inside images</li>
-          <li class="flex items-start gap-2"><span class="inline-block w-2 h-2 mt-1.5 bg-[#7DF9FF] rounded-sm shrink-0" style="border: 1.5px solid #000;"></span> Results vary between models &mdash; try different ones!</li>
+          <li class="flex items-start gap-2"><span class="inline-block w-2 h-2 mt-1.5 bg-[#7DF9FF] rounded-sm shrink-0" style="border: 1.5px solid #000;"></span> Results vary between models. Try different ones!</li>
           <li class="flex items-start gap-2"><span class="inline-block w-2 h-2 mt-1.5 bg-[#FF69B4] rounded-sm shrink-0" style="border: 1.5px solid #000;"></span> Images are saved to your gallery so you can download them anytime</li>
         </ul>
         <p>
-          <strong class="text-[#1a1a1a] font-bold">Which model should I use?</strong><br>
+          <strong class="text-[var(--fg)] font-bold">Features</strong>
+        </p>
+        <ul class="list-none space-y-1.5">
+          <li class="flex items-start gap-2"><span class="inline-block w-2 h-2 mt-1.5 bg-[#FF6B35] rounded-sm shrink-0" style="border: 1.5px solid #000;"></span> <strong>13 AI models</strong> from Cloudflare and Google Gemini</li>
+          <li class="flex items-start gap-2"><span class="inline-block w-2 h-2 mt-1.5 bg-[#FFD166] rounded-sm shrink-0" style="border: 1.5px solid #000;"></span> <strong>Compare mode</strong> to test the same prompt across multiple models side by side</li>
+          <li class="flex items-start gap-2"><span class="inline-block w-2 h-2 mt-1.5 bg-[#BFFF00] rounded-sm shrink-0" style="border: 1.5px solid #000;"></span> <strong>Prompt history</strong> so you can reuse and tweak past prompts</li>
+          <li class="flex items-start gap-2"><span class="inline-block w-2 h-2 mt-1.5 bg-[#7DF9FF] rounded-sm shrink-0" style="border: 1.5px solid #000;"></span> <strong>Gallery</strong> with favorites, tags, and shareable public links</li>
+          <li class="flex items-start gap-2"><span class="inline-block w-2 h-2 mt-1.5 bg-[#FF69B4] rounded-sm shrink-0" style="border: 1.5px solid #000;"></span> <strong>Usage dashboard</strong> to track your generations and model usage</li>
+        </ul>
+        <p>
+          <strong class="text-[var(--fg)] font-bold">Which model should I use?</strong><br>
           Start with <span class="font-bold text-[#FF6B35]">FLUX.1 Schnell</span> (free, great quality). If you want
           the best results and don't mind paying, try <span class="font-bold text-[#FF6B35]">FLUX.2 Dev</span>.
           For Google-powered generation, try <span class="font-bold text-[#FF6B35]">Gemini 2.5 Flash</span>.
@@ -261,12 +293,27 @@
     </div>
   </div>
 
+  {% include "partials/toast.html" %}
+
   <script>
+    // Theme toggle
+    function toggleTheme() {
+      const isDark = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+      updateThemeIcon();
+    }
+    function updateThemeIcon() {
+      const isDark = document.documentElement.classList.contains('dark');
+      document.getElementById('icon-sun').classList.toggle('hidden', !isDark);
+      document.getElementById('icon-moon').classList.toggle('hidden', isDark);
+    }
+    updateThemeIcon();
+
+    // Info modal
     function toggleInfo() {
       const panel = document.getElementById("info-panel");
       const backdrop = document.getElementById("info-backdrop");
       const isOpen = !panel.classList.contains("-translate-y-full");
-
       if (isOpen) {
         panel.classList.add("-translate-y-full");
         backdrop.classList.add("hidden");
@@ -278,7 +325,6 @@
         document.body.style.overflow = "hidden";
       }
     }
-
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         const panel = document.getElementById("info-panel");
@@ -286,21 +332,8 @@
       }
     });
 
-    // Theme toggle
-    function toggleTheme() {
-      const html = document.documentElement;
-      const isDark = html.classList.toggle('dark');
-      localStorage.setItem('theme', isDark ? 'dark' : 'light');
-      updateThemeIcon();
-    }
-    function updateThemeIcon() {
-      const isDark = document.documentElement.classList.contains('dark');
-      document.getElementById('icon-sun').classList.toggle('hidden', !isDark);
-      document.getElementById('icon-moon').classList.toggle('hidden', isDark);
-    }
-    updateThemeIcon();
-
     const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
+    let compareMode = false;
 
     const MODELS = {
       cloudflare: {
@@ -331,10 +364,19 @@
     const modelBadge = document.getElementById("model-badge");
     const tierBadge = document.getElementById("tier-badge");
 
+    const COMPARE_EXCLUDE = ["sd-img2img", "sd-inpaint"]; // These need input images, not text prompts
+
+    function getAllModels() {
+      const all = [];
+      MODELS.cloudflare.free.forEach(m => { if (!COMPARE_EXCLUDE.includes(m.key)) all.push({...m, tier: "free"}); });
+      MODELS.cloudflare.paid.forEach(m => all.push({...m, tier: "paid"}));
+      if (IS_ADMIN) MODELS.gemini.forEach(m => all.push({...m, tier: "gemini"}));
+      return all;
+    }
+
     function updateModels() {
       const provider = providerEl.value;
       modelEl.innerHTML = "";
-
       if (provider === "cloudflare") {
         const freeGroup = document.createElement("optgroup");
         freeGroup.label = "Free";
@@ -345,7 +387,6 @@
           freeGroup.appendChild(opt);
         });
         modelEl.appendChild(freeGroup);
-
         const paidGroup = document.createElement("optgroup");
         paidGroup.label = "Paid";
         MODELS.cloudflare.paid.forEach(m => {
@@ -360,33 +401,27 @@
           const opt = document.createElement("option");
           opt.value = m.key;
           opt.textContent = `${m.name} \u2014 ${m.desc}`;
-          if (!IS_ADMIN) {
-            opt.disabled = true;
-            opt.textContent += ' (Admins Only)';
-          }
+          if (!IS_ADMIN) { opt.disabled = true; opt.textContent += ' (Admins Only)'; }
           modelEl.appendChild(opt);
         });
       }
       updateBadge();
+      updateCompareChecklist();
     }
 
     function updateBadge() {
       const provider = providerEl.value;
       const key = modelEl.value;
-
       if (provider === "gemini") {
         tierBadge.textContent = "API Key Required";
         tierBadge.className = "nb-badge inline-block px-2 py-0.5 rounded-sm bg-[#FFD166]";
         modelBadge.classList.remove("hidden");
       } else {
         const isPaid = MODELS.cloudflare.paid.some(m => m.key === key);
-        if (isPaid) {
-          tierBadge.textContent = "Paid";
-          tierBadge.className = "nb-badge inline-block px-2 py-0.5 rounded-sm bg-[#FF69B4] text-white";
-        } else {
-          tierBadge.textContent = "Free";
-          tierBadge.className = "nb-badge inline-block px-2 py-0.5 rounded-sm bg-[#BFFF00]";
-        }
+        tierBadge.textContent = isPaid ? "Paid" : "Free";
+        tierBadge.className = isPaid
+          ? "nb-badge inline-block px-2 py-0.5 rounded-sm bg-[#FF69B4] text-white"
+          : "nb-badge inline-block px-2 py-0.5 rounded-sm bg-[#BFFF00]";
         modelBadge.classList.remove("hidden");
       }
     }
@@ -395,14 +430,71 @@
     modelEl.addEventListener("change", updateBadge);
     updateModels();
 
+    // Compare mode
+    function toggleCompareMode() {
+      compareMode = document.getElementById("compare-toggle").checked;
+      document.getElementById("compare-models").classList.toggle("hidden", !compareMode);
+      document.getElementById("generate-btn").textContent = compareMode ? "Compare Models" : "Generate Image";
+      if (!compareMode) {
+        modelEl.parentElement.classList.remove("hidden");
+      } else {
+        modelEl.parentElement.classList.add("hidden");
+      }
+    }
+
+    function updateCompareChecklist() {
+      const container = document.getElementById("compare-checklist");
+      container.innerHTML = "";
+      const models = getAllModels();
+      models.forEach(m => {
+        const label = document.createElement("label");
+        label.className = "flex items-center gap-2 py-1 cursor-pointer text-xs";
+        label.innerHTML = `<input type="checkbox" value="${m.key}" class="compare-check w-3.5 h-3.5" /><span class="font-medium text-[var(--fg-muted)]">${m.name}</span>`;
+        container.appendChild(label);
+      });
+    }
+
+    function getSelectedCompareModels() {
+      return [...document.querySelectorAll("#compare-checklist input:checked")].map(cb => cb.value);
+    }
+
+    // Prompt history
+    async function loadPromptHistory() {
+      try {
+        const res = await fetch("/api/prompts/recent");
+        const data = await res.json();
+        if (data.prompts && data.prompts.length > 0) {
+          document.getElementById("history-btn").classList.remove("hidden");
+          const list = document.getElementById("history-list");
+          list.innerHTML = "";
+          data.prompts.forEach(p => {
+            const div = document.createElement("div");
+            div.className = "px-3 py-2 text-xs cursor-pointer hover:bg-[#FFF3E0] text-[#1a1a1a] truncate";
+            div.textContent = p;
+            div.onclick = () => {
+              document.getElementById("prompt").value = p;
+              document.getElementById("prompt-history").classList.add("hidden");
+            };
+            list.appendChild(div);
+          });
+        }
+      } catch(e) {}
+    }
+    loadPromptHistory();
+
+    function toggleHistory() {
+      document.getElementById("prompt-history").classList.toggle("hidden");
+    }
+
+    // UI state management
     function showState(state) {
-      ["empty-state", "loading-state", "error-state", "result-state"].forEach(id => {
+      ["empty-state", "loading-state", "result-state", "compare-state"].forEach(id => {
         const el = document.getElementById(id);
         el.classList.add("hidden");
         el.classList.remove("flex");
       });
       const active = document.getElementById(state + "-state");
-      if (state === "loading" || state === "error" || state === "empty") {
+      if (state === "loading" || state === "empty") {
         active.classList.remove("hidden");
         active.classList.add("flex");
       } else {
@@ -415,10 +507,18 @@
       document.getElementById("generate-btn").disabled = false;
     }
 
+    // Generate handler
+    async function handleGenerate() {
+      if (compareMode) {
+        await generateComparison();
+      } else {
+        await generateImage();
+      }
+    }
+
     async function generateImage() {
       const prompt = document.getElementById("prompt").value.trim();
       if (!prompt) return;
-
       const btn = document.getElementById("generate-btn");
       btn.disabled = true;
       showState("loading");
@@ -433,32 +533,86 @@
       try {
         const res = await fetch("/generate", { method: "POST", body: formData });
         const data = await res.json();
-
         if (!res.ok || data.error) {
-          document.getElementById("error-msg").textContent = data.error || "Unknown error";
-          showState("error");
+          showToast(data.error || "Unknown error", "error");
+          showState("empty");
           btn.disabled = false;
           return;
         }
-
-        const img = document.getElementById("result-image");
-        img.src = data.image_url;
+        document.getElementById("result-image").src = data.image_url;
         document.getElementById("download-btn").href = `/download/${data.image_id}`;
         showState("result");
+        showToast("Image generated!", "success");
         btn.disabled = false;
-
+        loadPromptHistory();
       } catch (err) {
-        document.getElementById("error-msg").textContent = err.message;
-        showState("error");
+        showToast(err.message, "error");
+        showState("empty");
         btn.disabled = false;
       }
     }
 
-    // Allow Ctrl+Enter to generate
+    async function generateComparison() {
+      const prompt = document.getElementById("prompt").value.trim();
+      if (!prompt) return;
+      const keys = getSelectedCompareModels();
+      if (keys.length < 2 || keys.length > 4) {
+        showToast("Select 2-4 models to compare.", "error");
+        return;
+      }
+      const btn = document.getElementById("generate-btn");
+      btn.disabled = true;
+      document.getElementById("loading-text").textContent = `Comparing ${keys.length} models...`;
+      showState("loading");
+
+      const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+      const formData = new FormData();
+      formData.append("prompt", prompt);
+      formData.append("model_keys", keys.join(","));
+      formData.append("csrf_token", csrfToken);
+
+      try {
+        const res = await fetch("/generate/compare", { method: "POST", body: formData });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          showToast(data.error || "Unknown error", "error");
+          showState("empty");
+          btn.disabled = false;
+          return;
+        }
+        const grid = document.getElementById("compare-grid");
+        grid.innerHTML = "";
+        data.results.forEach(r => {
+          const cell = document.createElement("div");
+          if (r.error) {
+            cell.className = "rounded-md p-4 text-center bg-[var(--bg-muted)]";
+            cell.style.cssText = "border: 2px solid var(--border);";
+            cell.innerHTML = `<p class="text-xs font-bold text-[var(--fg-muted)]">${r.model_name}</p><p class="text-xs text-[#CC0000] mt-1">${r.error}</p>`;
+          } else {
+            cell.className = "rounded-md overflow-hidden";
+            cell.style.cssText = "border: 2.5px solid var(--border);";
+            cell.innerHTML = `<img src="${r.image_url}" class="w-full aspect-square object-cover" /><div class="p-2 text-center" style="border-top: 2px solid var(--border); background: var(--bg-muted);"><p class="text-xs font-bold text-[var(--fg)]">${r.model_name}</p></div>`;
+          }
+          grid.appendChild(cell);
+        });
+        showState("compare");
+        showToast("Comparison complete!", "success");
+        btn.disabled = false;
+        document.getElementById("loading-text").textContent = "Generating your image...";
+        loadPromptHistory();
+      } catch (err) {
+        showToast(err.message, "error");
+        showState("empty");
+        btn.disabled = false;
+        document.getElementById("loading-text").textContent = "Generating your image...";
+      }
+    }
+
+    // Ctrl+Enter to generate
     document.getElementById("prompt").addEventListener("keydown", (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         e.preventDefault();
-        generateImage();
+        handleGenerate();
       }
     });
   </script>

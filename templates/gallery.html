@@ -4,16 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token }}" />
-  <title>Gallery - Cloudfire Image Generator</title>
+  <title>Gallery - Cloudfire</title>
   <link rel="icon" type="image/jpeg" href="/static/fire-logo.jpg" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: { heading: ['Space Grotesk', 'system-ui', 'sans-serif'], body: ['DM Sans', 'system-ui', 'sans-serif'] },
-        }
-      }
+      theme: { extend: { fontFamily: { heading: ['Space Grotesk', 'system-ui', 'sans-serif'], body: ['DM Sans', 'system-ui', 'sans-serif'] } } }
     }
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -29,6 +25,8 @@
     .nb-btn:hover { box-shadow: 2px 2px 0 #000; transform: translate(2px, 2px); }
     .nb-btn:active { box-shadow: 0 0 0 #000; transform: translate(4px, 4px); }
     .nb-badge { border: 2px solid #000; color: #1a1a1a; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .nb-mini-btn { border: 2px solid #000; box-shadow: 2px 2px 0 #000; transition: all 0.1s ease; }
+    .nb-mini-btn:hover { transform: translate(1px, 1px); box-shadow: 1px 1px 0 #000; }
     #theme-toggle { cursor: pointer; transition: transform 0.3s ease; }
     #theme-toggle:hover { transform: scale(1.15); }
   </style>
@@ -64,6 +62,7 @@
               <g id="icon-moon"><path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></g>
             </svg>
             <a href="/" class="nb-badge px-2 sm:px-3 py-1 rounded-md bg-[#FF6B35] text-white text-[8px] sm:text-[10px]">Generator</a>
+            <a href="/dashboard" class="nb-badge px-2 sm:px-3 py-1 rounded-md bg-[#7DF9FF] text-[8px] sm:text-[10px]">Stats</a>
             <span class="nb-badge px-2 sm:px-3 py-1 rounded-md bg-[#FFD166] text-[8px] sm:text-[10px] hidden sm:inline-block">{{ username }}</span>
             <a href="/logout" class="nb-badge px-2 sm:px-3 py-1 rounded-md bg-[#FFE0E0] hover:bg-[#FFCCCC] transition-colors text-[8px] sm:text-[10px]">Logout</a>
           </div>
@@ -71,44 +70,53 @@
       </div>
     </header>
 
+    <!-- Filter bar -->
+    {% if images or active_favorite or active_tag %}
+    <div class="px-4 sm:px-6 py-2 bg-[var(--bg-card)]" style="border-bottom: 2px solid var(--border);">
+      <div class="max-w-6xl mx-auto flex items-center gap-2 flex-wrap">
+        <a href="/gallery" class="nb-badge px-2 py-0.5 rounded-sm text-[8px] {% if not active_favorite and not active_tag %}bg-[#FF6B35] text-white{% else %}bg-[#e8e8e0]{% endif %}">All</a>
+        <a href="/gallery?favorite=1" class="nb-badge px-2 py-0.5 rounded-sm text-[8px] {% if active_favorite %}bg-[#FF69B4] text-white{% else %}bg-[#e8e8e0]{% endif %}">Favorites</a>
+        {% for t in all_tags %}
+        <a href="/gallery?tag={{ t }}" class="nb-badge px-2 py-0.5 rounded-sm text-[8px] {% if active_tag == t %}bg-[#BFFF00]{% else %}bg-[#e8e8e0]{% endif %}">{{ t }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
     <!-- Main -->
     <main class="flex-1 px-4 sm:px-6 py-6 sm:py-8">
       <div class="max-w-6xl mx-auto">
 
         {% if not images %}
-        <!-- Empty state -->
         <div class="flex flex-col items-center justify-center py-24 text-center">
           <div class="w-24 h-24 rounded-md bg-[var(--bg-muted)] flex items-center justify-center mb-5" style="border: 3px solid var(--border);">
-            <svg class="w-12 h-12 text-[#CCC]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.41a2.25 2.25 0 013.182 0l2.909 2.91m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+            <svg class="w-12 h-12 text-[var(--fg-placeholder,#CCC)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.41a2.25 2.25 0 013.182 0l2.909 2.91m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
             </svg>
           </div>
-          <p class="text-[var(--fg-muted)] text-lg font-bold mb-2">No images yet</p>
-          <p class="text-[var(--fg-faint)] text-sm mb-6">Generate your first image to see it here</p>
-          <a href="/"
-            class="nb-btn bg-[#FF6B35] text-white font-bold px-6 py-2.5 rounded-md">
-            Generate Image
-          </a>
+          <p class="text-[var(--fg-muted)] text-lg font-bold mb-2">{% if active_favorite or active_tag %}No matching images{% else %}No images yet{% endif %}</p>
+          <p class="text-[var(--fg-faint)] text-sm mb-6">{% if active_favorite or active_tag %}<a href="/gallery" class="text-[#FF6B35] font-bold">Clear filters</a>{% else %}Generate your first image to see it here{% endif %}</p>
+          {% if not active_favorite and not active_tag %}
+          <a href="/" class="nb-btn bg-[#FF6B35] text-white font-bold px-6 py-2.5 rounded-md">Generate Image</a>
+          {% endif %}
         </div>
         {% else %}
 
-        <!-- Image grid -->
         <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
           {% for img in images %}
-          <div class="nb-card nb-card-hover bg-[var(--bg-card)] rounded-md overflow-hidden transition-all duration-150 group">
-            <!-- Image -->
-            <div class="relative cursor-pointer" onclick="openModal('{{ img.id }}', '{{ img.prompt | e }}', '{{ img.provider }}', '{{ img.model_name }}', '{{ img.created_at.strftime('%b %d, %Y at %I:%M %p') }}')">
-              <img src="/image/{{ img.id }}" alt="Generated image" loading="lazy"
-                class="w-full aspect-square object-cover" />
+          <div class="nb-card nb-card-hover bg-[var(--bg-card)] rounded-md overflow-hidden transition-all duration-150 group" id="card-{{ img.id }}">
+            <div class="relative cursor-pointer" onclick="openModal('{{ img.id }}', `{{ img.prompt | e }}`, '{{ img.provider }}', '{{ img.model_name }}', '{{ img.created_at.strftime('%b %d, %Y at %I:%M %p') }}', {{ 'true' if img.is_favorite else 'false' }}, {{ 'true' if img.is_public else 'false' }}, '{{ img.share_token or '' }}')">
+              <img src="/image/{{ img.id }}" alt="Generated image" loading="lazy" class="w-full aspect-square object-cover" />
               <div class="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-200 flex items-end">
                 <div class="p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                   <p class="text-xs text-white font-medium line-clamp-2 drop-shadow-lg">{{ img.prompt[:120] }}</p>
                 </div>
               </div>
+              {% if img.is_favorite %}
+              <div class="absolute top-2 right-2 text-lg">&#10084;</div>
+              {% endif %}
             </div>
-            <!-- Meta -->
-            <div class="px-4 py-3 flex items-center justify-between" style="border-top: 2.5px solid var(--border);">
+            <div class="px-3 sm:px-4 py-2 sm:py-3 flex items-center justify-between" style="border-top: 2.5px solid var(--border);">
               <div class="flex items-center gap-2 min-w-0">
                 {% if img.provider == 'cloudflare' %}
                 <span class="nb-badge px-1.5 py-0 rounded-sm bg-[#FF6B35] text-white" style="font-size: 8px;">CF</span>
@@ -117,19 +125,21 @@
                 {% endif %}
                 <span class="text-xs text-[var(--fg-dim)] truncate font-medium">{{ img.model_name }}</span>
               </div>
-              <div class="flex items-center gap-2 shrink-0">
-                <a href="/download/{{ img.id }}" title="Download"
-                  class="w-7 h-7 flex items-center justify-center rounded-sm bg-[#BFFF00] hover:translate-x-[1px] hover:translate-y-[1px] transition-transform" style="border: 2px solid #000; box-shadow: 2px 2px 0 #000;">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                      d="M12 10v6m0 0l-3-3m3 3l3-3" />
+              <div class="flex items-center gap-1.5 shrink-0">
+                <button onclick="event.stopPropagation(); toggleFav('{{ img.id }}', this)" title="Favorite"
+                  class="nb-mini-btn w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-sm text-xs {% if img.is_favorite %}bg-[#FF69B4]{% else %}bg-[var(--bg-muted)]{% endif %}">
+                  &#9829;
+                </button>
+                <a href="/download/{{ img.id }}" title="Download" onclick="event.stopPropagation()"
+                  class="nb-mini-btn w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-sm bg-[#BFFF00]">
+                  <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="#1a1a1a" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3" />
                   </svg>
                 </a>
                 <button onclick="event.stopPropagation(); deleteImage('{{ img.id }}', this)" title="Delete"
-                  class="w-7 h-7 flex items-center justify-center rounded-sm bg-[#FFE0E0] hover:bg-[#FFCCCC] hover:translate-x-[1px] hover:translate-y-[1px] transition-all" style="border: 2px solid #000; box-shadow: 2px 2px 0 #000;">
-                  <svg class="w-3.5 h-3.5 text-[#CC0000]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                      d="M6 18L18 6M6 6l12 12" />
+                  class="nb-mini-btn w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-sm bg-[#FFE0E0] hover:bg-[#FFCCCC]">
+                  <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#CC0000]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
@@ -142,12 +152,10 @@
       </div>
     </main>
 
-    <!-- Footer -->
     <footer class="px-4 sm:px-6 py-3 sm:py-4 bg-[var(--bg-card)]" style="border-top: 3px solid var(--border);">
       <div class="max-w-6xl mx-auto flex items-center justify-between text-[10px] sm:text-xs text-[var(--fg-faint)] font-medium">
         <span>Cloudfire Image Generator</span>
-        <a href="https://github.com/nodelabstudio/gemini-n-cloudflare-imagegen-ai" target="_blank"
-          class="hover:text-[#FF6B35] transition-colors">GitHub</a>
+        <a href="https://github.com/nodelabstudio/gemini-n-cloudflare-imagegen-ai" target="_blank" class="hover:text-[#FF6B35] transition-colors">GitHub</a>
       </div>
     </footer>
 
@@ -159,42 +167,65 @@
     <div class="relative h-full flex items-center justify-center p-3 sm:p-6">
       <div class="nb-card bg-[var(--bg-card)] rounded-md overflow-hidden max-w-4xl w-full max-h-[90vh] flex flex-col" onclick="event.stopPropagation()">
         <!-- Modal header -->
-        <div class="flex items-center justify-between px-5 py-3" style="border-bottom: 2.5px solid var(--border); background: var(--bg-muted);">
+        <div class="flex items-center justify-between px-4 sm:px-5 py-2 sm:py-3 shrink-0" style="border-bottom: 2.5px solid var(--border); background: var(--bg-muted);">
           <div class="flex items-center gap-3">
             <span id="modal-provider" class="nb-badge px-1.5 py-0 rounded-sm text-white" style="font-size: 8px;"></span>
             <span id="modal-model" class="text-sm text-[var(--fg-muted)] font-bold"></span>
           </div>
           <div class="flex items-center gap-3">
-            <span id="modal-date" class="text-xs text-[var(--fg-faint)]"></span>
-            <button onclick="closeModal()" class="w-8 h-8 flex items-center justify-center rounded-md bg-white font-bold text-sm" style="border: 2px solid #000; box-shadow: 2px 2px 0 #000;">
+            <span id="modal-date" class="text-xs text-[var(--fg-faint)] hidden sm:inline"></span>
+            <button onclick="closeModal()" class="w-8 h-8 flex items-center justify-center rounded-md bg-[var(--bg-card)] font-bold text-sm" style="border: 2px solid var(--border); box-shadow: 2px 2px 0 var(--shadow);">
               X
             </button>
           </div>
         </div>
         <!-- Modal image -->
         <div class="flex-1 overflow-auto bg-[var(--bg-muted)] flex items-center justify-center p-2">
-          <img id="modal-image" src="" alt="Full size image" class="max-w-full max-h-[65vh] object-contain rounded-md" style="border: 2px solid var(--border);" />
+          <img id="modal-image" src="" alt="Full size image" class="max-w-full max-h-[55vh] object-contain rounded-md" style="border: 2px solid var(--border);" />
         </div>
         <!-- Modal footer -->
-        <div class="px-5 py-3 space-y-2" style="border-top: 2.5px solid var(--border);">
+        <div class="px-4 sm:px-5 py-3 space-y-3 shrink-0" style="border-top: 2.5px solid var(--border);">
           <p id="modal-prompt" class="text-sm text-[var(--fg-muted)] leading-relaxed"></p>
-          <div class="flex gap-3">
+
+          <!-- Tags -->
+          <div id="modal-tags" class="flex flex-wrap gap-1.5 items-center">
+            <span class="text-[10px] font-bold text-[var(--fg-dim)] uppercase">Tags:</span>
+          </div>
+          <div class="flex gap-2">
+            <input id="tag-input" type="text" placeholder="Add tag..." class="nb-input flex-1 rounded-sm px-2 py-1 text-xs" maxlength="100" onkeydown="if(event.key==='Enter'){addTag(); event.preventDefault();}" />
+            <button onclick="addTag()" class="nb-badge px-2 py-0.5 rounded-sm bg-[#BFFF00] cursor-pointer text-[8px]" style="box-shadow: 1px 1px 0 #000;">Add</button>
+          </div>
+
+          <!-- Action buttons -->
+          <div class="flex gap-2 flex-wrap">
             <a id="modal-download" href="#" download
-              class="nb-btn flex-1 flex items-center justify-center gap-2 bg-[#FF6B35] text-white font-bold py-2.5 rounded-md text-sm">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
+              class="nb-btn flex-1 flex items-center justify-center gap-2 bg-[#FF6B35] text-white font-bold py-2 rounded-md text-xs sm:text-sm">
               Download
             </a>
+            <button onclick="copyPrompt()"
+              class="nb-btn flex items-center justify-center gap-1 bg-[#7DF9FF] text-[#1a1a1a] font-bold py-2 px-3 rounded-md text-xs sm:text-sm">
+              <span id="copy-btn-text">Copy Prompt</span>
+            </button>
+            <button id="share-btn" onclick="shareImage()"
+              class="nb-btn flex items-center justify-center gap-1 bg-[#FFD166] text-[#1a1a1a] font-bold py-2 px-3 rounded-md text-xs sm:text-sm">
+              Share
+            </button>
+          </div>
+
+          <!-- Share link (hidden until shared) -->
+          <div id="share-link-row" class="hidden flex gap-2 items-center">
+            <input id="share-link-input" type="text" readonly class="nb-input flex-1 rounded-sm px-2 py-1 text-xs" />
+            <button onclick="copyShareLink()" class="nb-badge px-2 py-0.5 rounded-sm bg-[#BFFF00] cursor-pointer text-[8px]" style="box-shadow: 1px 1px 0 #000;">Copy</button>
+            <button onclick="unshareImage()" class="nb-badge px-2 py-0.5 rounded-sm bg-[#FFE0E0] cursor-pointer text-[8px]" style="box-shadow: 1px 1px 0 #000;">Unshare</button>
           </div>
         </div>
       </div>
     </div>
   </div>
 
+  {% include "partials/toast.html" %}
+
   <script>
-    // Theme toggle
     function toggleTheme() {
       const isDark = document.documentElement.classList.toggle('dark');
       localStorage.setItem('theme', isDark ? 'dark' : 'light');
@@ -207,22 +238,38 @@
     }
     updateThemeIcon();
 
-    function openModal(id, prompt, provider, model, date) {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+    let currentImageId = null;
+
+    function openModal(id, prompt, provider, model, date, isFav, isPublic, shareToken) {
+      currentImageId = id;
       document.getElementById("modal-image").src = `/image/${id}`;
       document.getElementById("modal-prompt").textContent = prompt;
       document.getElementById("modal-model").textContent = model;
       document.getElementById("modal-date").textContent = date;
       document.getElementById("modal-download").href = `/download/${id}`;
+
       const dot = document.getElementById("modal-provider");
-      if (provider === 'cloudflare') {
-        dot.className = "nb-badge px-1.5 py-0 rounded-sm bg-[#FF6B35] text-white";
-        dot.style.fontSize = "8px";
-        dot.textContent = "CF";
+      dot.className = `nb-badge px-1.5 py-0 rounded-sm ${provider === 'cloudflare' ? 'bg-[#FF6B35]' : 'bg-[#4285F4]'} text-white`;
+      dot.style.fontSize = "8px";
+      dot.textContent = provider === 'cloudflare' ? 'CF' : 'G';
+
+      // Share state
+      const shareRow = document.getElementById("share-link-row");
+      if (isPublic && shareToken) {
+        shareRow.classList.remove("hidden");
+        shareRow.classList.add("flex");
+        document.getElementById("share-link-input").value = `${location.origin}/s/${shareToken}`;
+        document.getElementById("share-btn").textContent = "Shared";
       } else {
-        dot.className = "nb-badge px-1.5 py-0 rounded-sm bg-[#4285F4] text-white";
-        dot.style.fontSize = "8px";
-        dot.textContent = "G";
+        shareRow.classList.add("hidden");
+        shareRow.classList.remove("flex");
+        document.getElementById("share-btn").textContent = "Share";
       }
+
+      // Load tags
+      loadTags(id);
+
       document.getElementById("modal").classList.remove("hidden");
       document.body.style.overflow = "hidden";
     }
@@ -231,25 +278,144 @@
       if (e && e.target !== e.currentTarget) return;
       document.getElementById("modal").classList.add("hidden");
       document.body.style.overflow = "";
+      currentImageId = null;
     }
 
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeModal();
-    });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
 
+    // Copy prompt
+    function copyPrompt() {
+      const text = document.getElementById("modal-prompt").textContent;
+      navigator.clipboard.writeText(text);
+      const btn = document.getElementById("copy-btn-text");
+      btn.textContent = "Copied!";
+      showToast("Prompt copied to clipboard!", "success");
+      setTimeout(() => btn.textContent = "Copy Prompt", 2000);
+    }
+
+    // Favorites
+    async function toggleFav(id, btn) {
+      event.stopPropagation();
+      const res = await fetch(`/api/image/${id}/favorite`, {
+        method: "POST",
+        headers: { "X-CSRF-Token": csrfToken },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        btn.classList.toggle("bg-[#FF69B4]", data.is_favorite);
+        btn.classList.toggle("bg-[var(--bg-muted)]", !data.is_favorite);
+        showToast(data.is_favorite ? "Added to favorites" : "Removed from favorites", "info");
+      }
+    }
+
+    // Tags
+    async function loadTags(imageId) {
+      const container = document.getElementById("modal-tags");
+      container.innerHTML = '<span class="text-[10px] font-bold text-[var(--fg-dim)] uppercase">Tags:</span>';
+      try {
+        const res = await fetch(`/api/image/${imageId}/tags`);
+        if (!res.ok) return;
+        // Tags come from the page data
+      } catch(e) {}
+      // Use inline data
+      const imageTags = {{ image_tags | tojson }};
+      const tags = imageTags[imageId] || [];
+      tags.forEach(t => {
+        const pill = document.createElement("span");
+        pill.className = "nb-badge px-1.5 py-0 rounded-sm bg-[#BFFF00] text-[8px] cursor-pointer";
+        pill.style.boxShadow = "1px 1px 0 #000";
+        pill.innerHTML = `${t} <span onclick="removeTag('${imageId}', '${t}', this.parentNode)" class="ml-1">&times;</span>`;
+        container.appendChild(pill);
+      });
+    }
+
+    async function addTag() {
+      const input = document.getElementById("tag-input");
+      const tag = input.value.trim().toLowerCase();
+      if (!tag || !currentImageId) return;
+      const formData = new FormData();
+      formData.append("tag", tag);
+      const res = await fetch(`/api/image/${currentImageId}/tags`, {
+        method: "POST",
+        headers: { "X-CSRF-Token": csrfToken },
+        body: formData,
+      });
+      if (res.ok) {
+        input.value = "";
+        loadTags(currentImageId);
+        showToast(`Tag "${tag}" added`, "success");
+      } else {
+        const data = await res.json();
+        showToast(data.error || "Failed to add tag", "error");
+      }
+    }
+
+    async function removeTag(imageId, tag, pill) {
+      event.stopPropagation();
+      const res = await fetch(`/api/image/${imageId}/tags/${encodeURIComponent(tag)}`, {
+        method: "DELETE",
+        headers: { "X-CSRF-Token": csrfToken },
+      });
+      if (res.ok) {
+        pill.remove();
+        showToast(`Tag "${tag}" removed`, "info");
+      }
+    }
+
+    // Share
+    async function shareImage() {
+      if (!currentImageId) return;
+      const res = await fetch(`/api/image/${currentImageId}/share`, {
+        method: "POST",
+        headers: { "X-CSRF-Token": csrfToken },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const url = `${location.origin}${data.share_url}`;
+        document.getElementById("share-link-input").value = url;
+        document.getElementById("share-link-row").classList.remove("hidden");
+        document.getElementById("share-link-row").classList.add("flex");
+        document.getElementById("share-btn").textContent = "Shared";
+        showToast("Share link created!", "success");
+      }
+    }
+
+    async function unshareImage() {
+      if (!currentImageId) return;
+      const res = await fetch(`/api/image/${currentImageId}/share`, {
+        method: "DELETE",
+        headers: { "X-CSRF-Token": csrfToken },
+      });
+      if (res.ok) {
+        document.getElementById("share-link-row").classList.add("hidden");
+        document.getElementById("share-link-row").classList.remove("flex");
+        document.getElementById("share-btn").textContent = "Share";
+        showToast("Share link removed", "info");
+      }
+    }
+
+    function copyShareLink() {
+      const input = document.getElementById("share-link-input");
+      navigator.clipboard.writeText(input.value);
+      showToast("Share link copied!", "success");
+    }
+
+    // Delete
     async function deleteImage(id, btn) {
       if (!confirm("Delete this image?")) return;
-      const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
       const res = await fetch(`/image/${id}`, {
         method: "DELETE",
         headers: { "X-CSRF-Token": csrfToken },
       });
       if (res.ok) {
-        const card = btn.closest(".nb-card");
+        const card = document.getElementById(`card-${id}`);
         card.style.transition = "opacity 0.3s, transform 0.3s";
         card.style.opacity = "0";
-        card.style.transform = "scale(0.95) translate(2px, 2px)";
+        card.style.transform = "scale(0.95)";
         setTimeout(() => card.remove(), 300);
+        showToast("Image deleted", "info");
+      } else {
+        showToast("Failed to delete image", "error");
       }
     }
   </script>

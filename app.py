@@ -1,23 +1,26 @@
 import os
 import base64
 import uuid
+import secrets
 import contextvars
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, Depends
+from fastapi import FastAPI, Form, Depends, Query
 from fastapi.responses import HTMLResponse, Response, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 import requests as http_requests
 
-from database import init_db, get_db
-from models import GeneratedImage, User
+from database import init_db, get_db, engine
+from migrations import apply_migrations
+from models import GeneratedImage, ImageTag, User
 from auth import hash_password, verify_password, get_csrf_token, validate_csrf_token
 
 load_dotenv()
@@ -33,7 +36,6 @@ def _check_admin_exempt() -> bool:
 
 
 def get_user_key(request: Request) -> str:
-    """Return a rate-limit key. Admins get a separate key prefix so they can have different limits."""
     return request.session.get("user_id", request.client.host)
 
 
@@ -73,17 +75,15 @@ PUBLIC_PATHS = {"/login", "/register"}
 async def security_middleware(request: Request, call_next):
     path = request.url.path
 
-    # Auth gate (skip static files and public pages)
-    if path not in PUBLIC_PATHS and not path.startswith("/static"):
+    # Auth gate (skip static files, public pages, and share links)
+    if path not in PUBLIC_PATHS and not path.startswith("/static") and not path.startswith("/s/"):
         if not request.session.get("user_id"):
             return RedirectResponse("/login", status_code=302)
 
-    # Set admin context for rate limiter exemption
     _is_admin_request.set(request.session.get("is_admin", False))
 
     response = await call_next(request)
 
-    # Security headers
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
@@ -103,7 +103,6 @@ async def security_middleware(request: Request, call_next):
     return response
 
 
-# SessionMiddleware must be added AFTER @app.middleware so it wraps around it (outermost = runs first)
 app.add_middleware(
     SessionMiddleware,
     secret_key=SESSION_SECRET,
@@ -126,6 +125,7 @@ app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 @app.on_event("startup")
 def startup():
     init_db()
+    apply_migrations(engine)
 
 
 # --------------- Auth routes ---------------
@@ -245,19 +245,149 @@ def index(request: Request):
 
 
 @app.get("/gallery", response_class=HTMLResponse)
-def gallery(request: Request, db: Session = Depends(get_db)):
-    images = (
-        db.query(GeneratedImage)
-        .order_by(GeneratedImage.created_at.desc())
-        .limit(100)
+def gallery(
+    request: Request,
+    favorite: str = Query(None),
+    tag: str = Query(None),
+    db: Session = Depends(get_db),
+):
+    query = db.query(GeneratedImage).order_by(GeneratedImage.created_at.desc())
+
+    if favorite == "1":
+        query = query.filter(GeneratedImage.is_favorite == True)
+
+    if tag:
+        tag_image_ids = [t.image_id for t in db.query(ImageTag.image_id).filter(ImageTag.tag == tag).all()]
+        query = query.filter(GeneratedImage.id.in_(tag_image_ids))
+
+    images = query.limit(100).all()
+
+    # Get all tags for filter bar
+    all_tags = (
+        db.query(ImageTag.tag)
+        .distinct()
+        .order_by(ImageTag.tag)
         .all()
     )
+    all_tags = [t[0] for t in all_tags]
+
+    # Get tags per image for display
+    image_ids = [img.id for img in images]
+    image_tags = {}
+    if image_ids:
+        tags_rows = db.query(ImageTag).filter(ImageTag.image_id.in_(image_ids)).all()
+        for t in tags_rows:
+            image_tags.setdefault(t.image_id, []).append(t.tag)
+
     return templates.TemplateResponse("gallery.html", {
         "request": request,
         "username": request.session.get("username", ""),
         "csrf_token": get_csrf_token(request),
         "images": images,
+        "image_tags": image_tags,
+        "all_tags": all_tags,
+        "active_tag": tag,
+        "active_favorite": favorite == "1",
     })
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard(request: Request, db: Session = Depends(get_db)):
+    uid = request.session.get("user_id")
+
+    total = db.query(func.count(GeneratedImage.id)).filter(GeneratedImage.user_id == uid).scalar() or 0
+
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    today_count = (
+        db.query(func.count(GeneratedImage.id))
+        .filter(GeneratedImage.user_id == uid)
+        .filter(func.substr(GeneratedImage.created_at, 1, 10) == today_str)
+        .scalar() or 0
+    )
+
+    # Generations per day (last 14 days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    day_expr = func.substr(GeneratedImage.created_at, 1, 10)
+    daily_stats = (
+        db.query(
+            day_expr.label("day"),
+            func.count(GeneratedImage.id).label("count"),
+        )
+        .filter(GeneratedImage.user_id == uid)
+        .filter(GeneratedImage.created_at >= cutoff)
+        .group_by(day_expr)
+        .order_by(day_expr)
+        .all()
+    )
+    daily_data = [{"day": row.day, "count": row.count} for row in daily_stats]
+    max_daily = max((d["count"] for d in daily_data), default=1)
+
+    # Model usage
+    model_stats = (
+        db.query(
+            GeneratedImage.model_key,
+            GeneratedImage.model_name,
+            GeneratedImage.provider,
+            func.count(GeneratedImage.id).label("count"),
+        )
+        .filter(GeneratedImage.user_id == uid)
+        .group_by(GeneratedImage.model_key, GeneratedImage.model_name, GeneratedImage.provider)
+        .order_by(func.count(GeneratedImage.id).desc())
+        .all()
+    )
+    model_data = [{"key": r.model_key, "name": r.model_name, "provider": r.provider, "count": r.count} for r in model_stats]
+
+    # Provider split
+    provider_stats = (
+        db.query(GeneratedImage.provider, func.count(GeneratedImage.id).label("count"))
+        .filter(GeneratedImage.user_id == uid)
+        .group_by(GeneratedImage.provider)
+        .all()
+    )
+    provider_data = {r.provider: r.count for r in provider_stats}
+
+    top_model = model_data[0]["name"] if model_data else "None yet"
+
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request,
+        "username": request.session.get("username", ""),
+        "csrf_token": get_csrf_token(request),
+        "total": total,
+        "today_count": today_count,
+        "top_model": top_model,
+        "provider_data": provider_data,
+        "daily_data": daily_data,
+        "max_daily": max_daily,
+        "model_data": model_data,
+    })
+
+
+# --------------- Share routes (public) ---------------
+
+@app.get("/s/{share_token}", response_class=HTMLResponse)
+def shared_image(share_token: str, request: Request, db: Session = Depends(get_db)):
+    record = db.query(GeneratedImage).filter(
+        GeneratedImage.share_token == share_token,
+        GeneratedImage.is_public == True,
+    ).first()
+    if not record:
+        return HTMLResponse("<h1>Image not found</h1>", status_code=404)
+    return templates.TemplateResponse("share.html", {
+        "request": request,
+        "image": record,
+    })
+
+
+@app.get("/s/{share_token}/image")
+def shared_image_file(share_token: str, db: Session = Depends(get_db)):
+    record = db.query(GeneratedImage).filter(
+        GeneratedImage.share_token == share_token,
+        GeneratedImage.is_public == True,
+    ).first()
+    if not record:
+        return JSONResponse({"error": "Image not found"}, status_code=404)
+    return Response(content=record.image_data, media_type="image/png")
 
 
 # --------------- API routes ---------------
@@ -318,6 +448,68 @@ def generate(
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@app.post("/generate/compare")
+@limiter.limit("2/minute", exempt_when=_check_admin_exempt)
+def generate_compare(
+    request: Request,
+    prompt: str = Form(...),
+    model_keys: str = Form(...),
+    csrf_token: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    if not validate_csrf_token(request, csrf_token):
+        return JSONResponse({"error": "Invalid CSRF token"}, status_code=403)
+
+    keys = [k.strip() for k in model_keys.split(",") if k.strip()]
+    if len(keys) < 2 or len(keys) > 4:
+        return JSONResponse({"error": "Select 2-4 models to compare."}, status_code=400)
+
+    results = []
+    for mk in keys:
+        model_info = ALL_MODELS.get(mk)
+        if not model_info:
+            results.append({"model_key": mk, "model_name": mk, "error": "Unknown model"})
+            continue
+
+        provider = "gemini" if mk in GEMINI_MODELS else "cloudflare"
+        if provider == "gemini" and not request.session.get("is_admin"):
+            results.append({"model_key": mk, "model_name": model_info["name"], "error": "Admins only"})
+            continue
+
+        try:
+            if provider == "cloudflare":
+                image_data = generate_cloudflare(prompt, mk)
+            else:
+                image_data = generate_gemini(prompt, mk)
+
+            if not image_data:
+                results.append({"model_key": mk, "model_name": model_info["name"], "error": "Content filtered"})
+                continue
+
+            record = GeneratedImage(
+                id=uuid.uuid4().hex,
+                prompt=prompt,
+                provider=provider,
+                model_key=mk,
+                model_name=model_info["name"],
+                image_data=image_data,
+                user_id=request.session.get("user_id"),
+            )
+            db.add(record)
+            db.commit()
+
+            results.append({
+                "model_key": mk,
+                "model_name": model_info["name"],
+                "image_url": f"/image/{record.id}",
+                "image_id": record.id,
+            })
+        except Exception as e:
+            results.append({"model_key": mk, "model_name": model_info["name"], "error": str(e)[:100]})
+
+    return JSONResponse({"results": results})
+
+
 @app.get("/image/{image_id}")
 def serve_image(image_id: str, db: Session = Depends(get_db)):
     record = db.query(GeneratedImage).filter(GeneratedImage.id == image_id).first()
@@ -348,7 +540,107 @@ def delete_image(request: Request, image_id: str, db: Session = Depends(get_db))
     record = db.query(GeneratedImage).filter(GeneratedImage.id == image_id).first()
     if not record:
         return JSONResponse({"error": "Image not found"}, status_code=404)
+    db.query(ImageTag).filter(ImageTag.image_id == image_id).delete()
     db.delete(record)
+    db.commit()
+    return JSONResponse({"ok": True})
+
+
+# --- Prompt history ---
+
+@app.get("/api/prompts/recent")
+def recent_prompts(request: Request, db: Session = Depends(get_db)):
+    uid = request.session.get("user_id")
+    rows = (
+        db.query(GeneratedImage.prompt, func.max(GeneratedImage.created_at).label("latest"))
+        .filter(GeneratedImage.user_id == uid)
+        .group_by(GeneratedImage.prompt)
+        .order_by(func.max(GeneratedImage.created_at).desc())
+        .limit(20)
+        .all()
+    )
+    return JSONResponse({"prompts": [r.prompt for r in rows]})
+
+
+# --- Favorites ---
+
+@app.post("/api/image/{image_id}/favorite")
+def toggle_favorite(request: Request, image_id: str, db: Session = Depends(get_db)):
+    csrf = request.headers.get("x-csrf-token", "")
+    if not validate_csrf_token(request, csrf):
+        return JSONResponse({"error": "Invalid CSRF token"}, status_code=403)
+
+    record = db.query(GeneratedImage).filter(GeneratedImage.id == image_id).first()
+    if not record:
+        return JSONResponse({"error": "Image not found"}, status_code=404)
+    record.is_favorite = not record.is_favorite
+    db.commit()
+    return JSONResponse({"is_favorite": record.is_favorite})
+
+
+# --- Tags ---
+
+@app.post("/api/image/{image_id}/tags")
+def add_tag(request: Request, image_id: str, tag: str = Form(...), db: Session = Depends(get_db)):
+    csrf = request.headers.get("x-csrf-token", "")
+    if not validate_csrf_token(request, csrf):
+        return JSONResponse({"error": "Invalid CSRF token"}, status_code=403)
+
+    tag = tag.strip().lower()[:100]
+    if not tag:
+        return JSONResponse({"error": "Tag cannot be empty"}, status_code=400)
+
+    existing = db.query(ImageTag).filter(ImageTag.image_id == image_id, ImageTag.tag == tag).first()
+    if existing:
+        return JSONResponse({"error": "Tag already exists"}, status_code=400)
+
+    db.add(ImageTag(id=uuid.uuid4().hex, image_id=image_id, tag=tag))
+    db.commit()
+    return JSONResponse({"ok": True, "tag": tag})
+
+
+@app.delete("/api/image/{image_id}/tags/{tag}")
+def remove_tag(request: Request, image_id: str, tag: str, db: Session = Depends(get_db)):
+    csrf = request.headers.get("x-csrf-token", "")
+    if not validate_csrf_token(request, csrf):
+        return JSONResponse({"error": "Invalid CSRF token"}, status_code=403)
+
+    row = db.query(ImageTag).filter(ImageTag.image_id == image_id, ImageTag.tag == tag).first()
+    if row:
+        db.delete(row)
+        db.commit()
+    return JSONResponse({"ok": True})
+
+
+# --- Share ---
+
+@app.post("/api/image/{image_id}/share")
+def share_image(request: Request, image_id: str, db: Session = Depends(get_db)):
+    csrf = request.headers.get("x-csrf-token", "")
+    if not validate_csrf_token(request, csrf):
+        return JSONResponse({"error": "Invalid CSRF token"}, status_code=403)
+
+    record = db.query(GeneratedImage).filter(GeneratedImage.id == image_id).first()
+    if not record:
+        return JSONResponse({"error": "Image not found"}, status_code=404)
+
+    if not record.share_token:
+        record.share_token = secrets.token_hex(16)
+    record.is_public = True
+    db.commit()
+    return JSONResponse({"share_url": f"/s/{record.share_token}"})
+
+
+@app.delete("/api/image/{image_id}/share")
+def unshare_image(request: Request, image_id: str, db: Session = Depends(get_db)):
+    csrf = request.headers.get("x-csrf-token", "")
+    if not validate_csrf_token(request, csrf):
+        return JSONResponse({"error": "Invalid CSRF token"}, status_code=403)
+
+    record = db.query(GeneratedImage).filter(GeneratedImage.id == image_id).first()
+    if not record:
+        return JSONResponse({"error": "Image not found"}, status_code=404)
+    record.is_public = False
     db.commit()
     return JSONResponse({"ok": True})
 
