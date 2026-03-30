@@ -4,15 +4,17 @@ import uuid
 import secrets
 import contextvars
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, Depends, Query
+from fastapi import FastAPI, Form, Depends, Query, Header
 from fastapi.responses import HTMLResponse, Response, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 from sqlalchemy import func
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
@@ -67,6 +69,12 @@ GEMINI_MODELS = {
 
 ALL_MODELS = {**CLOUDFLARE_MODELS, **GEMINI_MODELS}
 
+
+class DesktopGenerateRequest(BaseModel):
+    prompt: str
+    provider: str = "cloudflare"
+    model: str = "flux-2-dev"
+
 PUBLIC_PATHS = {"/login", "/register", "/forgot-password"}
 
 
@@ -77,7 +85,7 @@ async def security_middleware(request: Request, call_next):
     path = request.url.path
 
     # Auth gate (skip static files, public pages, share links, and password reset)
-    if path not in PUBLIC_PATHS and not path.startswith("/static") and not path.startswith("/s/") and not path.startswith("/reset-password"):
+    if path not in PUBLIC_PATHS and not path.startswith("/static") and not path.startswith("/s/") and not path.startswith("/reset-password") and not path.startswith("/api/generate-image"):
         if not request.session.get("user_id"):
             return RedirectResponse("/login", status_code=302)
 
@@ -806,12 +814,11 @@ def generate_cloudflare(prompt: str, model_key: str) -> bytes | None:
     model_id = model_info["id"]
     url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model_id}"
 
-    response = http_requests.post(
-        url,
-        headers={"Authorization": f"Bearer {api_token}"},
-        json={"prompt": prompt},
-        timeout=120,
-    )
+    headers = {"Authorization": f"Bearer {api_token}"}
+    if model_key.startswith("flux-2"):
+        response = http_requests.post(url, headers=headers, data={"prompt": prompt}, timeout=120)
+    else:
+        response = http_requests.post(url, headers=headers, json={"prompt": prompt}, timeout=120)
 
     if response.status_code != 200:
         try:
@@ -879,3 +886,56 @@ def generate_gemini(prompt: str, model_key: str) -> bytes | None:
             return part.inline_data.data
 
     return None
+
+
+# --------------- Standalone Image Generation API ---------------
+
+
+@app.post("/api/generate-image")
+def generate_image_api(body: DesktopGenerateRequest, authorization: str = Header(None)):
+    api_key = os.environ.get("API_KEY")
+    if not api_key:
+        return JSONResponse({"success": False, "error": "API_KEY not configured on server."}, status_code=500)
+
+    expected = f"Bearer {api_key}"
+    if not authorization or authorization != expected:
+        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
+
+    model_dict = {"cloudflare": CLOUDFLARE_MODELS, "gemini": GEMINI_MODELS}.get(body.provider)
+    if model_dict is None:
+        return JSONResponse(
+            {"success": False, "error": f"Unknown provider '{body.provider}'. Use 'cloudflare' or 'gemini'."},
+            status_code=400,
+        )
+
+    if body.model not in model_dict:
+        valid = ", ".join(model_dict.keys())
+        return JSONResponse(
+            {"success": False, "error": f"Unknown model '{body.model}' for {body.provider}. Valid: {valid}"},
+            status_code=400,
+        )
+
+    gen_fn = generate_cloudflare if body.provider == "cloudflare" else generate_gemini
+    try:
+        image_data = gen_fn(body.prompt, body.model)
+    except ValueError as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=422)
+    except Exception as e:
+        return JSONResponse({"success": False, "error": f"Generation failed: {e}"}, status_code=500)
+
+    if not image_data:
+        return JSONResponse(
+            {"success": False, "error": "No image generated. The prompt may have been content-filtered. Try a different prompt."},
+            status_code=422,
+        )
+
+    image_b64 = base64.b64encode(image_data).decode("utf-8")
+
+    return JSONResponse({
+        "success": True,
+        "image_base64": image_b64,
+        "content_type": "image/png",
+        "prompt": body.prompt,
+        "provider": body.provider,
+        "model": body.model,
+    })

@@ -5,6 +5,7 @@
 # Drafts
 tweet-draft.txt
 deployment.md
+openclaw-instructions.md
 
 # Generated images
 output/
@@ -28,3 +29,4 @@ venv/
 
 # Claude
 .claude/
+
