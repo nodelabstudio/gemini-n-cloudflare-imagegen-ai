@@ -28,8 +28,11 @@ def apply_migrations(engine):
 
         # Make image_data nullable (images now stored in Cloudinary)
         if "image_data" in cols:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE images ALTER COLUMN image_data DROP NOT NULL"))
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE images ALTER COLUMN image_data DROP NOT NULL"))
+            except Exception:
+                pass  # Already nullable or SQLite (doesn't support ALTER COLUMN)
 
     # --- users table ---
     if "users" in insp.get_table_names():
