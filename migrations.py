@@ -26,6 +26,11 @@ def apply_migrations(engine):
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE images ADD COLUMN image_url VARCHAR(500)"))
 
+        # Make image_data nullable (images now stored in Cloudinary)
+        if "image_data" in cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE images ALTER COLUMN image_data DROP NOT NULL"))
+
     # --- users table ---
     if "users" in insp.get_table_names():
         cols = {c["name"] for c in insp.get_columns("users")}
