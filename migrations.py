@@ -22,6 +22,10 @@ def apply_migrations(engine):
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE images ADD COLUMN is_public BOOLEAN DEFAULT 0 NOT NULL"))
 
+        if "image_url" not in cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE images ADD COLUMN image_url VARCHAR(500)"))
+
     # --- users table ---
     if "users" in insp.get_table_names():
         cols = {c["name"] for c in insp.get_columns("users")}

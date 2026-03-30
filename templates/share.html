@@ -33,7 +33,7 @@
 
     <!-- Image card -->
     <div class="nb-card bg-white rounded-md overflow-hidden">
-      <img src="/s/{{ image.share_token }}/image" alt="Generated image" class="w-full" />
+      <img src="{{ image.image_url }}" alt="Generated image" class="w-full" />
       <div class="p-5 space-y-3" style="border-top: 2.5px solid #000;">
         <p class="text-sm text-[#555] leading-relaxed">{{ image.prompt }}</p>
         <div class="flex items-center gap-2">

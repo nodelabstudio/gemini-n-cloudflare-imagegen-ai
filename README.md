@@ -10,7 +10,7 @@ A web UI and CLI for generating images with **Cloudflare Workers AI** and **Goog
 
 - Web UI with model selection, prompt input, image preview, and download
 - 11 Cloudflare models (6 free, 5 paid) + 2 Gemini models (admin-only)
-- Model comparison mode (test same prompt across 2-4 models side by side)
+- Model comparison mode (test same prompt across 2-3 models side by side)
 - Prompt history with reusable recent prompts
 - Gallery with favorites, tags, and filtering
 - Shareable public links for individual images
@@ -19,12 +19,12 @@ A web UI and CLI for generating images with **Cloudflare Workers AI** and **Goog
 - Neobrutalist UI with dark/light mode toggle
 - CLI scripts for quick one-off generation
 - Black image / content filter detection
-- PostgreSQL-backed image storage with SQLite fallback for local dev
+- Cloudinary-backed image storage (CDN-hosted, persistent across deploys)
 - Self-service forgot password flow with email reset links
 - User authentication (bcrypt-hashed passwords, session cookies)
 - Admin roles (Gemini restricted, rate limit exempt)
 - CSRF protection on all mutations
-- Rate limiting (5 image generations per minute per user)
+- Rate limiting (5 image generations per 5 minutes per user)
 - Security headers (CSP, HSTS, X-Frame-Options, etc.)
 - One-click Railway deployment
 
@@ -66,8 +66,10 @@ Open [http://localhost:8000](http://localhost:8000) in your browser.
    - `GEMINI_API_KEY` (Google, optional)
    - `SESSION_SECRET` (generate with `python3 -c "import secrets; print(secrets.token_hex(32))"`)
    - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `FROM_EMAIL` (for password reset emails — see below)
+   - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (image storage — see [cloudinary.com](https://cloudinary.com))
 
-6. Railway auto-detects the `Procfile` and deploys
+6. **Important:** Link the Postgres service to your web service so `DATABASE_URL` is auto-injected (or add it manually). Without this, the app falls back to SQLite which is wiped on every deploy.
+7. Railway auto-detects the `Procfile` and deploys
 
 ### Email (Password Reset)
 
@@ -144,7 +146,7 @@ python3 gemini_image_gen.py --diagnose
 - **Password Reset:** Self-service forgot password via email (SMTP through [Resend](https://resend.com))
 - **Sessions:** Signed cookies (7-day expiry, SameSite=Lax, Secure flag in production)
 - **CSRF:** Token-based protection on all POST/DELETE endpoints
-- **Rate Limiting:** 5 image generations per minute per user (slowapi/limits)
+- **Rate Limiting:** 5 image generations per 5 minutes per user (slowapi/limits)
 - **Headers:** CSP, X-Frame-Options DENY, X-Content-Type-Options, HSTS (in production), Referrer-Policy, Permissions-Policy
 
 ### Cloudflare Reverse Proxy (recommended for production)
@@ -161,6 +163,7 @@ python3 gemini_image_gen.py --diagnose
 - **Auth:** passlib + bcrypt, Starlette sessions
 - **Email:** Resend (SMTP)
 - **Database:** PostgreSQL (Railway) / SQLite (local dev)
+- **Image Storage:** Cloudinary (CDN)
 - **Providers:** Cloudflare Workers AI, Google Gemini
 - **Deployment:** Railway
 

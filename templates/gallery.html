@@ -105,8 +105,8 @@
         <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
           {% for img in images %}
           <div class="nb-card nb-card-hover bg-[var(--bg-card)] rounded-md overflow-hidden transition-all duration-150 group" id="card-{{ img.id }}">
-            <div class="relative cursor-pointer" onclick="openModal('{{ img.id }}', `{{ img.prompt | e }}`, '{{ img.provider }}', '{{ img.model_name }}', '{{ img.created_at.strftime('%b %d, %Y at %I:%M %p') }}', {{ 'true' if img.is_favorite else 'false' }}, {{ 'true' if img.is_public else 'false' }}, '{{ img.share_token or '' }}')">
-              <img src="/image/{{ img.id }}" alt="Generated image" loading="lazy" class="w-full aspect-square object-cover" />
+            <div class="relative cursor-pointer" onclick="openModal('{{ img.id }}', `{{ img.prompt | e }}`, '{{ img.provider }}', '{{ img.model_name }}', '{{ img.created_at.strftime('%b %d, %Y at %I:%M %p') }}', {{ 'true' if img.is_favorite else 'false' }}, {{ 'true' if img.is_public else 'false' }}, '{{ img.share_token or '' }}', '{{ img.image_url }}')">
+              <img src="{{ img.image_url }}" alt="Generated image" loading="lazy" class="w-full aspect-square object-cover" />
               <div class="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-200 flex items-end">
                 <div class="p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                   <p class="text-xs text-white font-medium line-clamp-2 drop-shadow-lg">{{ img.prompt[:120] }}</p>
@@ -245,9 +245,9 @@
     const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
     let currentImageId = null;
 
-    function openModal(id, prompt, provider, model, date, isFav, isPublic, shareToken) {
+    function openModal(id, prompt, provider, model, date, isFav, isPublic, shareToken, imageUrl) {
       currentImageId = id;
-      document.getElementById("modal-image").src = `/image/${id}`;
+      document.getElementById("modal-image").src = imageUrl;
       document.getElementById("modal-prompt").textContent = prompt;
       document.getElementById("modal-model").textContent = model;
       document.getElementById("modal-date").textContent = date;

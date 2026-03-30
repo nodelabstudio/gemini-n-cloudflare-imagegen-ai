@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, String, Text, LargeBinary, DateTime
+from sqlalchemy import Boolean, Column, String, Text, DateTime
 
 from database import Base
 
@@ -36,7 +36,7 @@ class GeneratedImage(Base):
     provider = Column(String(50), nullable=False)
     model_key = Column(String(100), nullable=False)
     model_name = Column(String(200), nullable=False, default="")
-    image_data = Column(LargeBinary, nullable=False)
+    image_url = Column(String(500), nullable=False)
     user_id = Column(String, nullable=True)
     is_favorite = Column(Boolean, default=False, nullable=False)
     share_token = Column(String(32), unique=True, nullable=True, index=True)

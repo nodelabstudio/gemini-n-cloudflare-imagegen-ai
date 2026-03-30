@@ -25,6 +25,7 @@ from migrations import apply_migrations
 from models import GeneratedImage, ImageTag, User, PasswordResetToken
 from auth import hash_password, verify_password, get_csrf_token, validate_csrf_token
 from email_utils import send_password_reset_email, is_email_configured
+from cloudinary_utils import configure_cloudinary, upload_image, delete_image
 
 load_dotenv()
 
@@ -103,7 +104,7 @@ async def security_middleware(request: Request, call_next):
         "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src https://fonts.gstatic.com; "
-        "img-src 'self' data:; "
+        "img-src 'self' data: https://res.cloudinary.com; "
         "connect-src 'self'"
     )
     if os.environ.get("RAILWAY_ENVIRONMENT"):
@@ -135,6 +136,7 @@ app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 def startup():
     init_db()
     apply_migrations(engine)
+    configure_cloudinary()
 
 
 # --------------- Auth routes ---------------
@@ -540,7 +542,7 @@ def shared_image_file(share_token: str, db: Session = Depends(get_db)):
     ).first()
     if not record:
         return JSONResponse({"error": "Image not found"}, status_code=404)
-    return Response(content=record.image_data, media_type="image/png")
+    return RedirectResponse(record.image_url, status_code=302)
 
 
 # --------------- API routes ---------------
@@ -578,20 +580,23 @@ def generate(
         model_info = ALL_MODELS.get(model_key, {})
         model_name = model_info.get("name", model_key)
 
+        image_id = uuid.uuid4().hex
+        cloudinary_url = upload_image(image_data, image_id)
+
         image_record = GeneratedImage(
-            id=uuid.uuid4().hex,
+            id=image_id,
             prompt=prompt,
             provider=provider,
             model_key=model_key,
             model_name=model_name,
-            image_data=image_data,
+            image_url=cloudinary_url,
             user_id=request.session.get("user_id"),
         )
         db.add(image_record)
         db.commit()
 
         return JSONResponse({
-            "image_url": f"/image/{image_record.id}",
+            "image_url": cloudinary_url,
             "image_id": image_record.id,
         })
 
@@ -639,13 +644,16 @@ def generate_compare(
                 results.append({"model_key": mk, "model_name": model_info["name"], "error": "Content filtered"})
                 continue
 
+            image_id = uuid.uuid4().hex
+            cloudinary_url = upload_image(image_data, image_id)
+
             record = GeneratedImage(
-                id=uuid.uuid4().hex,
+                id=image_id,
                 prompt=prompt,
                 provider=provider,
                 model_key=mk,
                 model_name=model_info["name"],
-                image_data=image_data,
+                image_url=cloudinary_url,
                 user_id=request.session.get("user_id"),
             )
             db.add(record)
@@ -654,7 +662,7 @@ def generate_compare(
             results.append({
                 "model_key": mk,
                 "model_name": model_info["name"],
-                "image_url": f"/image/{record.id}",
+                "image_url": cloudinary_url,
                 "image_id": record.id,
             })
         except Exception as e:
@@ -668,7 +676,7 @@ def serve_image(image_id: str, db: Session = Depends(get_db)):
     record = db.query(GeneratedImage).filter(GeneratedImage.id == image_id).first()
     if not record:
         return JSONResponse({"error": "Image not found"}, status_code=404)
-    return Response(content=record.image_data, media_type="image/png")
+    return RedirectResponse(record.image_url, status_code=302)
 
 
 @app.get("/download/{image_id}")
@@ -676,12 +684,9 @@ def download(image_id: str, db: Session = Depends(get_db)):
     record = db.query(GeneratedImage).filter(GeneratedImage.id == image_id).first()
     if not record:
         return JSONResponse({"error": "Image not found"}, status_code=404)
-    filename = f"gen_{record.created_at.strftime('%Y%m%d_%H%M%S')}_{image_id[:6]}.png"
-    return Response(
-        content=record.image_data,
-        media_type="image/png",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+    filename = f"gen_{record.created_at.strftime('%Y%m%d_%H%M%S')}_{image_id[:6]}"
+    download_url = record.image_url.replace("/upload/", f"/upload/fl_attachment:{filename}/")
+    return RedirectResponse(download_url, status_code=302)
 
 
 @app.delete("/image/{image_id}")
@@ -693,6 +698,10 @@ def delete_image(request: Request, image_id: str, db: Session = Depends(get_db))
     record = db.query(GeneratedImage).filter(GeneratedImage.id == image_id).first()
     if not record:
         return JSONResponse({"error": "Image not found"}, status_code=404)
+    try:
+        delete_image(f"cloudfire/{image_id}")
+    except Exception:
+        pass
     db.query(ImageTag).filter(ImageTag.image_id == image_id).delete()
     db.delete(record)
     db.commit()
@@ -931,9 +940,16 @@ def generate_image_api(body: DesktopGenerateRequest, authorization: str = Header
 
     image_b64 = base64.b64encode(image_data).decode("utf-8")
 
+    upload_id = uuid.uuid4().hex
+    try:
+        cloudinary_url = upload_image(image_data, upload_id)
+    except Exception:
+        cloudinary_url = None
+
     return JSONResponse({
         "success": True,
         "image_base64": image_b64,
+        "image_url": cloudinary_url,
         "content_type": "image/png",
         "prompt": body.prompt,
         "provider": body.provider,
