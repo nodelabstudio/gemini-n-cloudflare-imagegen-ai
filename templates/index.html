@@ -128,7 +128,7 @@
 
             <!-- Compare model checklist (hidden by default) -->
             <div id="compare-models" class="hidden space-y-1.5 pl-1">
-              <p class="text-xs text-[var(--fg-dim)]">Select 2-4 models:</p>
+              <p class="text-xs text-[var(--fg-dim)]">Select 2-3 models:</p>
               <div id="compare-checklist"></div>
             </div>
           </div>
@@ -560,8 +560,8 @@
       const prompt = document.getElementById("prompt").value.trim();
       if (!prompt) return;
       const keys = getSelectedCompareModels();
-      if (keys.length < 2 || keys.length > 4) {
-        showToast("Select 2-4 models to compare.", "error");
+      if (keys.length < 2 || keys.length > 3) {
+        showToast("Select 2-3 models to compare.", "error");
         return;
       }
       const btn = document.getElementById("generate-btn");

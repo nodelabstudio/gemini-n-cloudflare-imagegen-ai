@@ -546,7 +546,7 @@ def shared_image_file(share_token: str, db: Session = Depends(get_db)):
 # --------------- API routes ---------------
 
 @app.post("/generate")
-@limiter.limit("5/minute", exempt_when=_check_admin_exempt)
+@limiter.limit("5/5minutes", exempt_when=_check_admin_exempt)
 def generate(
     request: Request,
     prompt: str = Form(...),
@@ -602,7 +602,7 @@ def generate(
 
 
 @app.post("/generate/compare")
-@limiter.limit("2/minute", exempt_when=_check_admin_exempt)
+@limiter.limit("5/5minutes", exempt_when=_check_admin_exempt)
 def generate_compare(
     request: Request,
     prompt: str = Form(...),
@@ -614,8 +614,8 @@ def generate_compare(
         return JSONResponse({"error": "Invalid CSRF token"}, status_code=403)
 
     keys = [k.strip() for k in model_keys.split(",") if k.strip()]
-    if len(keys) < 2 or len(keys) > 4:
-        return JSONResponse({"error": "Select 2-4 models to compare."}, status_code=400)
+    if len(keys) < 2 or len(keys) > 3:
+        return JSONResponse({"error": "Select 2-3 models to compare."}, status_code=400)
 
     results = []
     for mk in keys:
